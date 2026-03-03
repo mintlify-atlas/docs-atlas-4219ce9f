@@ -1,0 +1,85 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "StackProbe",
+  "projectDescription": "Audit your JS/TS project before it becomes a problem",
+  "theme": "aspen",
+  "primaryColor": "#0EA5E9",
+  "lightColor": "#38BDF8",
+  "darkColor": "#0284C7",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Checks",
+            "pages": [
+              "checks/overview",
+              "checks/dependencies",
+              "checks/environment",
+              "checks/license",
+              "checks/engine",
+              "checks/circular"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/config-file",
+              "configuration/cli-options"
+            ]
+          },
+          {
+            "group": "Usage",
+            "pages": [
+              "usage/ci-integration",
+              "usage/examples"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "CLI Reference",
+            "pages": [
+              "reference/commands",
+              "reference/exit-codes",
+              "reference/output-formats"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Dependency version checking and outdated package detection",
+    "Environment variable validation (.env vs .env.example)",
+    "License file detection and identification",
+    "Node.js engine version verification",
+    "Circular dependency detection",
+    "JSON and human-readable output formats",
+    "CI-friendly exit codes",
+    "Configurable check selection"
+  ],
+  "publicApiSurface": [
+    "stackprobe audit",
+    "stackprobe audit --json",
+    "stackprobe audit --only <checks>",
+    "stackprobe.config.js configuration",
+    "checkLicense()",
+    "checkEnv()",
+    "checkDependencies()",
+    "checkEngine()",
+    "checkCircular()"
+  ]
+}
