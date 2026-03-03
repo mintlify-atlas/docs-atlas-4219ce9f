@@ -102,7 +102,7 @@ stackprobe audit --json > audit-results.json
 if [ $? -ne 0 ]; then
   echo "Audit failed"
   # Parse results for custom handling
-  cat audit-results.json | jq '.results[] | select(.status == "fail")"
+  cat audit-results.json | jq '.results[] | select(.status == "fail")'
 fi
 ```
 
