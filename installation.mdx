@@ -1,0 +1,253 @@
+---
+title: Installation
+description: Get StackProbe installed and ready to use
+---
+
+# Installation
+
+StackProbe can be installed globally, added as a dev dependency, or run directly with `npx`. Choose the method that works best for your workflow.
+
+## Quick Install
+
+<CodeGroup>
+```bash npm
+npm install -g stackprobe
+```
+
+```bash yarn
+yarn global add stackprobe
+```
+
+```bash pnpm
+pnpm add -g stackprobe
+```
+
+```bash npx (no install)
+npx stackprobe audit
+```
+</CodeGroup>
+
+<Tip>
+  For one-off audits or trying StackProbe without installing, use `npx stackprobe audit`. For regular use, install globally.
+</Tip>
+
+## Add to Project Dev Dependencies
+
+If you want to lock StackProbe to a specific version in your project:
+
+<CodeGroup>
+```bash npm
+npm install --save-dev stackprobe
+```
+
+```bash yarn
+yarn add --dev stackprobe
+```
+
+```bash pnpm
+pnpm add -D stackprobe
+```
+</CodeGroup>
+
+Then add to your `package.json` scripts:
+
+```json package.json
+{
+  "scripts": {
+    "audit": "stackprobe audit",
+    "precommit": "stackprobe audit --only deps,env"
+  }
+}
+```
+
+## System Requirements
+
+StackProbe requires:
+
+<Card title="Node.js >= 16.0.0" icon="node-js">
+  StackProbe is built with modern Node.js features and requires Node 16 or higher.
+</Card>
+
+### Check Your Node Version
+
+```bash
+node --version
+```
+
+If you're on Node 14 or lower, upgrade using:
+
+<CodeGroup>
+```bash nvm
+nvm install 18
+nvm use 18
+```
+
+```bash n
+n lts
+```
+
+```bash Manual
+# Download from nodejs.org
+https://nodejs.org/
+```
+</CodeGroup>
+
+## Verify Installation
+
+After installing, verify StackProbe is working:
+
+<Steps>
+  <Step title="Check Version">
+    ```bash
+    stackprobe --version
+    ```
+    
+    Should output: `0.1.2` (or higher)
+  </Step>
+
+  <Step title="View Help">
+    ```bash
+    stackprobe --help
+    ```
+    
+    Expected output:
+    ```
+    Usage: stackprobe [options] [command]
+
+    Audit your project before it becomes a problem
+
+    Options:
+      -V, --version        output the version number
+      -h, --help          display help for command
+
+    Commands:
+      audit [options]     Run all checks on the current project
+      help [command]      display help for command
+    ```
+  </Step>
+
+  <Step title="Run Test Audit">
+    Navigate to any Node.js project and run:
+    ```bash
+    stackprobe audit
+    ```
+    
+    You should see output similar to:
+    ```
+    🔍 stackprobe — auditing your project...
+
+    ✅ license      PASS  (10ms)
+    ✅ env          PASS  (5ms)
+    ✅ deps         PASS  (1523ms)
+    ✅ engine       PASS  (4ms)
+    ✅ circular     PASS  (189ms)
+
+    ────────────────────────────────────────────────
+    Summary  5 passed  in 1731ms
+
+    All checks passed. Ship it! 🚀
+    ```
+  </Step>
+</Steps>
+
+## What Gets Installed
+
+StackProbe is a lightweight CLI with minimal dependencies:
+
+- **Binary**: `stackprobe` command available in your PATH
+- **Dependencies**: 
+  - `commander` - CLI argument parsing
+  - `chalk` & `picocolors` - Terminal colors
+  - `semver` - Version comparison
+- **Size**: ~500KB installed
+
+<Note>
+  StackProbe does NOT install heavy analysis tools like `madge` or `depcheck`. It uses lightweight built-in checks to keep installation fast.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Command not found: stackprobe">
+    If you installed globally but get `command not found`:
+
+    1. Check your global npm bin path:
+       ```bash
+       npm config get prefix
+       ```
+
+    2. Ensure it's in your PATH:
+       ```bash
+       echo $PATH
+       ```
+
+    3. Reinstall with correct permissions:
+       ```bash
+       sudo npm install -g stackprobe
+       ```
+
+    Or use `npx` instead:
+    ```bash
+    npx stackprobe audit
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied errors">
+    On Linux/macOS, you may need to fix npm permissions:
+
+    ```bash
+    # Option 1: Use a Node version manager (recommended)
+    # Install nvm or n
+
+    # Option 2: Change npm's default directory
+    mkdir ~/.npm-global
+    npm config set prefix '~/.npm-global"
+    echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+  </Accordion>
+
+  <Accordion title="Node version too old">
+    If you see errors about unsupported Node features:
+
+    ```
+    Error: Requires Node >= 16.0.0
+    ```
+
+    Upgrade Node using nvm:
+    ```bash
+    nvm install 18
+    nvm alias default 18
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Uninstalling
+
+To remove StackProbe:
+
+<CodeGroup>
+```bash npm (global)
+npm uninstall -g stackprobe
+```
+
+```bash npm (local)
+npm uninstall stackprobe
+```
+
+```bash yarn
+yarn remove stackprobe
+```
+
+```bash pnpm
+pnpm remove stackprobe
+```
+</CodeGroup>
+
+## Next Steps
+
+Now that StackProbe is installed, let's run your first audit:
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Learn how to audit your first project in minutes
+</Card>

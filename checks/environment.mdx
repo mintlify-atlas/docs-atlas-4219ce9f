@@ -1,0 +1,318 @@
+---
+title: "Environment Check"
+description: "Validate .env and .env.example synchronization"
+icon: "key"
+---
+
+## What It Does
+
+The environment check validates that your `.env` and `.env.example` files are in sync, preventing missing environment variables and ensuring smooth onboarding for new developers.
+
+**Key Features:**
+- Detects missing `.env.example` when `.env` exists
+- Identifies keys in `.env` but missing from `.env.example` (undocumented)
+- Flags keys in `.env.example` but missing from `.env` (potentially required)
+- Skips projects that don't use environment files
+
+<Note>
+  **Source:** `/src/checks/env.ts`
+</Note>
+
+## What It Checks
+
+The check performs these validations:
+
+1. **File Existence:**
+   - Pass if neither `.env` nor `.env.example` exists (not all projects need them)
+   - Warn if `.env` exists but `.env.example` is missing
+
+2. **Key Synchronization:**
+   - Parse environment variable keys from both files
+   - Detect **undocumented keys** (in `.env` but not `.env.example`)
+   - Detect **missing keys** (in `.env.example` but not `.env`)
+
+3. **Ignore Comments:**
+   - Lines starting with `#` are skipped
+   - Empty lines are ignored
+
+<Accordion title="View Source Code" icon="code">
+```typescript /src/checks/env.ts:25-99
+export async function checkEnv(): Promise<CheckResult> {
+  const cwd = process.cwd();
+  const envPath = path.join(cwd, ".env");
+  const envExamplePath = path.join(cwd, ".env.example");
+
+  const envExists = fs.existsSync(envPath);
+  const envExampleExists = fs.existsSync(envExamplePath);
+
+  // No env files at all — probably not a project that uses them
+  if (!envExists && !envExampleExists) {
+    return {
+      checkName: "env",
+      status: "pass",
+      messages: [
+        { level: "info", text: "No .env files found — skipping env check" },
+      ],
+    };
+  }
+
+  const messages: CheckResult["messages"] = [];
+  let status: CheckResult["status"] = "pass";
+
+  // .env exists but no .env.example — risk of secrets being committed
+  if (envExists && !envExampleExists) {
+    status = "warn";
+    messages.push({
+      level: "warn",
+      text: ".env found but .env.example is missing",
+    });
+    messages.push({
+      level: "info",
+      text: "Create .env.example with keys but no real values so others can onboard",
+    });
+    return { checkName: "env", status, messages };
+  }
+
+  // Both exist — check for drift
+  const envKeys = parseEnvKeys(envPath);
+  const exampleKeys = parseEnvKeys(envExamplePath);
+
+  // Keys in .env but not in .env.example (forgotten to document)
+  const undocumented = envKeys.filter((k) => !exampleKeys.includes(k));
+
+  // Keys in .env.example but not in .env (potentially missing locally)
+  const missing = exampleKeys.filter((k) => !envKeys.includes(k));
+
+  if (undocumented.length > 0) {
+    status = "warn";
+    messages.push({
+      level: "warn",
+      text: `Keys in .env but missing from .env.example: ${undocumented.join(", ")}`,
+    });
+  }
+
+  if (missing.length > 0) {
+    status = "warn";
+    messages.push({
+      level: "warn",
+      text: `Keys in .env.example but missing from your .env: ${missing.join(", ")}`,
+    });
+    messages.push({
+      level: "info",
+      text: "These may be required — check with your team or docs",
+    });
+  }
+
+  if (messages.length === 0) {
+    messages.push({
+      level: "info",
+      text: ".env and .env.example are in sync",
+    });
+  }
+
+  return { checkName: "env", status, messages };
+}
+```
+</Accordion>
+
+## Example Output
+
+<CodeGroup>
+```bash Pass: In Sync
+✓ env — .env and .env.example are in sync
+```
+
+```bash Warn: Missing .env.example
+⚠ env
+  ⚠ .env found but .env.example is missing
+  ℹ Create .env.example with keys but no real values so others can onboard
+```
+
+```bash Warn: Key Drift
+⚠ env
+  ⚠ Keys in .env but missing from .env.example: SECRET_API_KEY, DEBUG_MODE
+  ⚠ Keys in .env.example but missing from your .env: DATABASE_URL, REDIS_HOST
+  ℹ These may be required — check with your team or docs
+```
+
+```bash Pass: No Env Files
+✓ env — No .env files found — skipping env check
+```
+</CodeGroup>
+
+## Why It Matters
+
+<Warning>
+  **Onboarding & Security Risks**
+  
+  Out-of-sync environment files cause:
+  - **New developers** struggle to run the project locally
+  - **Missing variables** cause runtime errors in production
+  - **Undocumented secrets** risk being committed to version control
+  - **Configuration drift** between team members
+</Warning>
+
+## How to Fix
+
+### 1. Create Missing .env.example
+
+If you have `.env` but no `.env.example`:
+
+```bash
+cp .env .env.example
+```
+
+Then **remove all sensitive values**:
+
+```diff .env.example
+- DATABASE_URL=postgres://user:secret@localhost/db
++ DATABASE_URL=postgres://user:password@localhost/dbname
+
+- STRIPE_SECRET_KEY=sk_live_abc123xyz789
++ STRIPE_SECRET_KEY=sk_test_your_key_here
+
+- JWT_SECRET=super-secret-key-do-not-share
++ JWT_SECRET=your-jwt-secret
+```
+
+<Note>
+  **Best Practice:** Use placeholder values that show the expected format without revealing secrets.
+</Note>
+
+### 2. Sync Undocumented Keys
+
+If keys exist in `.env` but not `.env.example`:
+
+```bash .env
+DATABASE_URL=postgres://localhost/mydb
+REDIS_URL=redis://localhost:6379
+SECRET_API_KEY=abc123  # ← This key is undocumented
+```
+
+Add it to `.env.example`:
+
+```bash .env.example
+DATABASE_URL=postgres://localhost/dbname
+REDIS_URL=redis://localhost:6379
+SECRET_API_KEY=your_api_key_here
+```
+
+### 3. Add Missing Required Keys
+
+If keys are in `.env.example` but missing from your `.env`:
+
+```bash
+# Check what the key is for
+grep -A 2 "DATABASE_URL" .env.example
+
+# Add it to your .env
+echo "DATABASE_URL=postgres://localhost/mydb" >> .env
+```
+
+### 4. Verify Sync
+
+```bash
+stackprobe audit --only env
+```
+
+## Parsing Logic
+
+The check uses a simple parser that extracts keys:
+
+```typescript /src/checks/env.ts:5-23
+function parseEnvKeys(filePath: string): string[] {
+  if (!fs.existsSync(filePath)) return [];
+
+  const content = fs.readFileSync(filePath, "utf-8");
+  const keys: string[] = [];
+
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    // Skip comments and empty lines
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex > 0) {
+      keys.push(trimmed.slice(0, eqIndex).trim());
+    }
+  }
+
+  return keys;
+}
+```
+
+**What it parses:**
+- ✅ `KEY=value` → extracts `KEY`
+- ✅ `KEY = value` → extracts `KEY`
+- ✅ `KEY="quoted value"` → extracts `KEY`
+- ❌ `# COMMENTED_KEY=value` → skipped
+- ❌ Empty lines → skipped
+
+## Common Scenarios
+
+<AccordionGroup>
+  <Accordion title="First-time setup" icon="seedling">
+    When cloning a repo for the first time:
+    
+    ```bash
+    cp .env.example .env
+    # Fill in your local values
+    nano .env
+    ```
+  </Accordion>
+  
+  <Accordion title="Adding a new secret" icon="plus">
+    When adding a new environment variable:
+    
+    1. Add to `.env` with the real value
+    2. Add to `.env.example` with a placeholder
+    3. Document it in your README
+    4. Run `stackprobe audit --only env` to verify
+  </Accordion>
+  
+  <Accordion title="Removing deprecated variables" icon="trash">
+    When removing old environment variables:
+    
+    1. Remove from both `.env` and `.env.example`
+    2. Search codebase for usage: `grep -r "OLD_VAR" src/`
+    3. Update documentation
+  </Accordion>
+  
+  <Accordion title="Handling optional variables" icon="circle-question">
+    For optional environment variables, add a comment:
+    
+    ```bash .env.example
+    # Optional: Enable debug logging
+    # DEBUG=true
+    ```
+    
+    The check ignores commented-out keys.
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+To disable this check:
+
+```json stackprobe.config.json
+{
+  "ignore": ["env"]
+}
+```
+
+Or run it exclusively:
+
+```bash
+stackprobe audit --only env
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="License Check" icon="scale-balanced" href="/checks/license">
+    Ensure your project has a LICENSE file
+  </Card>
+  <Card title="Dependencies Check" icon="cube" href="/checks/dependencies">
+    Check for outdated npm packages
+  </Card>
+</CardGroup>

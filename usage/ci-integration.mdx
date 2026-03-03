@@ -1,0 +1,400 @@
+---
+title: CI/CD Integration
+description: Using StackProbe in continuous integration pipelines
+---
+
+## Overview
+
+StackProbe is designed to run in CI/CD environments, helping you catch issues before they reach production. It exits with code 1 when checks fail, making it perfect for automated quality gates.
+
+## Exit Code Behavior
+
+StackProbe follows standard Unix conventions for exit codes:
+
+- **Exit 0**: All checks passed (or passed with warnings only)
+- **Exit 1**: One or more checks failed
+
+The exit behavior is controlled in `runner.ts:84`:
+
+```typescript
+const hasFail = results.some((r) => r.status === "fail");
+if (hasFail) process.exit(1);
+```
+
+By default, only checks with `status: "fail"` will cause a non-zero exit. Warnings do not fail the build.
+
+## GitHub Actions
+
+### Basic Setup
+
+Add StackProbe to your GitHub Actions workflow:
+
+```yaml
+name: Quality Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18"
+          cache: 'npm"
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run StackProbe
+        run: npx stackprobe audit
+```
+
+### With JSON Output
+
+Capture structured output for further processing:
+
+```yaml
+- name: Run StackProbe
+  id: stackprobe
+  run: |
+    npx stackprobe audit --json > stackprobe-results.json
+    cat stackprobe-results.json
+  continue-on-error: true
+
+- name: Upload results
+  uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: stackprobe-results
+    path: stackprobe-results.json
+```
+
+### Selective Checks
+
+Run only specific checks in CI:
+
+```yaml
+- name: Check Dependencies Only
+  run: npx stackprobe audit --only deps,engine
+```
+
+### Matrix Strategy
+
+Run different checks across multiple jobs:
+
+```yaml
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        check: [deps, license, env, engine, circular]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18"
+      - run: npm ci
+      - name: Run ${{ matrix.check }} check
+        run: npx stackprobe audit --only ${{ matrix.check }}
+```
+
+## GitLab CI
+
+### Basic Pipeline
+
+```yaml
+stages:
+  - quality
+
+stackprobe:
+  stage: quality
+  image: node:18
+  script:
+    - npm ci
+    - npx stackprobe audit
+  only:
+    - merge_requests
+    - main
+```
+
+### With Artifacts
+
+```yaml
+stackprobe:
+  stage: quality
+  image: node:18
+  script:
+    - npm ci
+    - npx stackprobe audit --json | tee stackprobe-results.json
+  artifacts:
+    when: always
+    reports:
+      dotenv: stackprobe-results.json
+    paths:
+      - stackprobe-results.json
+    expire_in: 1 week
+  allow_failure: false
+```
+
+### Multiple Jobs
+
+```yaml
+.stackprobe-base:
+  stage: quality
+  image: node:18
+  before_script:
+    - npm ci
+
+check-deps:
+  extends: .stackprobe-base
+  script:
+    - npx stackprobe audit --only deps
+
+check-security:
+  extends: .stackprobe-base
+  script:
+    - npx stackprobe audit --only env,license
+
+check-code-quality:
+  extends: .stackprobe-base
+  script:
+    - npx stackprobe audit --only circular,engine
+```
+
+## Using --json Flag in CI
+
+The `--json` flag outputs structured data perfect for CI processing:
+
+```bash
+npx stackprobe audit --json
+```
+
+### JSON Output Structure
+
+```json
+{
+  "results": [
+    {
+      "checkName": "license",
+      "status": "pass",
+      "messages": [
+        {
+          "level": "info",
+          "text": "LICENSE found (MIT)"
+        }
+      ],
+      "duration": 5
+    },
+    {
+      "checkName": "deps",
+      "status": "warn",
+      "messages": [
+        {
+          "level": "warn",
+          "text": "commander is 2 major version(s) behind"
+        }
+      ],
+      "duration": 1247
+    }
+  ],
+  "duration": 1523
+}
+```
+
+### Processing JSON Output
+
+```bash
+# Extract failed checks
+npx stackprobe audit --json | jq '.results[] | select(.status=="fail") | .checkName"
+
+# Count warnings
+npx stackprobe audit --json | jq '[.results[] | select(.status=="warn")] | length"
+
+# Get all error messages
+npx stackprobe audit --json | jq '.results[].messages[] | select(.level=="error") | .text"
+```
+
+## Using --only Flag
+
+Run specific checks for faster CI feedback:
+
+```bash
+# Single check
+npx stackprobe audit --only deps
+
+# Multiple checks (comma-separated)
+npx stackprobe audit --only deps,engine,license
+
+# Fast checks only (skip slow ones like circular)
+npx stackprobe audit --only license,env,engine
+```
+
+## Configuration-Based CI
+
+Use `stackprobe.config.js` for consistent CI behavior:
+
+```javascript
+// stackprobe.config.js
+module.exports = {
+  // Skip checks that don't make sense in CI
+  ignore: ['env'],
+  
+  // Fail on warnings in CI (override with env var)
+  failOn: process.env.CI === 'true' ? 'warn' : 'error',
+};
+```
+
+Note: The `failOn` configuration is defined in `config.ts:7` but not yet fully implemented in the runner.
+
+## Failing on Warnings vs Errors
+
+By default, StackProbe only fails the build on errors, not warnings. The configuration includes a `failOn` option:
+
+```javascript
+// stackprobe.config.js
+module.exports = {
+  failOn: 'warn',  // Exit 1 on warnings too
+};
+```
+
+**Current Behavior** (as of v0.1.2):
+- Only `status: "fail"` causes exit code 1
+- `status: "warn"` displays warnings but exits 0
+- The `failOn` config is loaded but not yet used in the exit logic
+
+**Workaround** to fail on warnings:
+
+```bash
+# Parse JSON and fail if any warnings exist
+npx stackprobe audit --json | jq -e '.results[] | select(.status=="warn") | empty' && exit 1 || exit 0
+```
+
+## Performance Optimization
+
+### Cache Node Modules
+
+**GitHub Actions:**
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    cache: 'npm"
+```
+
+**GitLab CI:**
+```yaml
+cache:
+  paths:
+    - node_modules/
+    - .npm/
+```
+
+### Skip Slow Checks
+
+The `circular` check can be slow on large codebases:
+
+```yaml
+# Fast checks in every pipeline
+- npx stackprobe audit --only deps,license,env,engine
+
+# Full audit including circular only on main
+- npx stackprobe audit  # runs all checks
+```
+
+## Troubleshooting
+
+### Permission Issues
+
+If StackProbe fails to read files:
+
+```yaml
+- name: Fix permissions
+  run: chmod -R +r .
+  
+- name: Run StackProbe
+  run: npx stackprobe audit
+```
+
+### Network Timeouts
+
+The `deps` check fetches from npm registry. If CI has network issues:
+
+```yaml
+- name: Run with timeout
+  run: timeout 5m npx stackprobe audit --only deps
+  continue-on-error: true
+```
+
+### Missing package.json
+
+Some checks skip if files are missing:
+
+```yaml
+- name: Verify package.json exists
+  run: test -f package.json
+  
+- name: Run StackProbe
+  run: npx stackprobe audit
+```
+
+## Best Practices
+
+1. **Run early in pipeline** - Catch issues before expensive build steps
+2. **Use --only for speed** - Run fast checks on every commit, full audit on PRs
+3. **Save JSON output** - Keep artifacts for historical analysis
+4. **Don't fail on warnings** - Unless you're ready to fix them all
+5. **Cache dependencies** - npm registry requests can be slow
+6. **Set timeouts** - Prevent hanging CI jobs
+
+## Example: Complete CI Setup
+
+```yaml
+name: Quality Pipeline
+
+on: [push, pull_request]
+
+jobs:
+  quick-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18"
+          cache: 'npm"
+      - run: npm ci
+      - name: Fast checks
+        run: npx stackprobe audit --only license,env,engine
+
+  full-audit:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18"
+          cache: 'npm"
+      - run: npm ci
+      - name: Full audit
+        run: npx stackprobe audit --json > results.json
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stackprobe-results
+          path: results.json
+      - name: Check for failures
+        run: |
+          if jq -e '.results[] | select(.status=="fail")' results.json > /dev/null; then
+            echo "Audit failed!"
+            exit 1
+          fi
+```

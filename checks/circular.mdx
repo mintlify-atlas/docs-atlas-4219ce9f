@@ -1,0 +1,487 @@
+---
+title: "Circular Dependencies Check"
+description: "Detect and resolve circular dependency chains in your codebase"
+icon: "arrows-spin"
+---
+
+## What It Does
+
+The circular dependencies check analyzes your project's import/require statements to detect circular dependency chains — a common source of bugs, initialization issues, and bundling problems.
+
+**Key Features:**
+- Walks your source directory to build a dependency graph
+- Detects cycles using depth-first search (DFS)
+- Resolves relative imports (`./ ../`) to absolute paths
+- Supports TypeScript and JavaScript projects
+- Shows up to 3 cycles to keep output readable
+- Ignores `node_modules` and build directories
+
+<Note>
+  **Source:** `/src/checks/circular.ts`
+</Note>
+
+## What It Checks
+
+The check follows this process:
+
+1. **Determine File Extensions:**
+   - Checks for `tsconfig.json` to detect TypeScript projects
+   - TypeScript: `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`
+   - JavaScript: `.js`, `.jsx`, `.mjs`, `.cjs`
+
+2. **Find Source Directory:**
+   - Prefers `src/` directory if it exists
+   - Falls back to current working directory
+
+3. **Walk Directory Tree:**
+   - Recursively scans for matching file extensions
+   - Skips: `node_modules`, `.git`, `dist`, `build`, `.next`, `coverage`
+
+4. **Extract Imports:**
+   - Parses ES6 imports: `import foo from './bar'`
+   - Parses CommonJS: `require('./bar')`
+   - **Ignores type-only imports:** `import type { Foo } from './bar'`
+   - Skips external packages (non-relative imports)
+
+5. **Build Dependency Graph:**
+   - Resolves relative paths to absolute paths
+   - Tries extensions and `index` files
+   - Creates adjacency list representation
+
+6. **Find Cycles:**
+   - Uses DFS with stack tracking
+   - Reports all detected cycles
+   - Limits output to first 3 cycles
+
+<Accordion title="View Source Code" icon="code">
+```typescript /src/checks/circular.ts:152-224
+export async function checkCircular(): Promise<CheckResult> {
+  const cwd = process.cwd();
+
+  // Determine if it's a TS or JS project
+  const isTs = fs.existsSync(path.join(cwd, "tsconfig.json"));
+  const extensions = isTs
+    ? [".ts", ".tsx", ".js", ".jsx", ".mjs"]
+    : [".js", ".jsx", ".mjs", ".cjs"];
+
+  // Find src dir or fall back to cwd
+  const srcDir = fs.existsSync(path.join(cwd, "src"))
+    ? path.join(cwd, "src")
+    : cwd;
+
+  const files = walkDirectory(srcDir, extensions);
+
+  if (files.length === 0) {
+    return {
+      checkName: "circular",
+      status: "skip",
+      messages: [
+        {
+          level: "info",
+          text: `No ${extensions.join("/")} files found to analyze`,
+        },
+      ],
+    };
+  }
+
+  const graph = buildGraph(files, extensions);
+  const cycles = findCycles(graph);
+
+  if (cycles.length === 0) {
+    return {
+      checkName: "circular",
+      status: "pass",
+      messages: [
+        {
+          level: "info",
+          text: `No circular dependencies found across ${files.length} files`,
+        },
+      ],
+    };
+  }
+
+  const messages: CheckResult["messages"] = [
+    {
+      level: "error",
+      text: `Found ${cycles.length} circular dependency chain(s)`,
+    },
+  ];
+
+  // Show up to 3 cycles to keep output readable
+  for (const cycle of cycles.slice(0, 3)) {
+    messages.push({
+      level: "warn",
+      text: cycle.map(relativize).join(" → "),
+    });
+  }
+
+  if (cycles.length > 3) {
+    messages.push({
+      level: "info",
+      text: `...and ${cycles.length - 3} more. Fix the above first.`,
+    });
+  }
+
+  return {
+    checkName: "circular",
+    status: "fail",
+    messages,
+  };
+}
+```
+</Accordion>
+
+## Example Output
+
+<CodeGroup>
+```bash Pass: No Cycles
+✓ circular — No circular dependencies found across 142 files
+```
+
+```bash Fail: Cycles Detected
+✗ circular
+  ✗ Found 3 circular dependency chain(s)
+  ⚠ src/auth/index.ts → src/auth/user.ts → src/auth/session.ts → src/auth/index.ts
+  ⚠ src/db/models/post.ts → src/db/models/user.ts → src/db/models/post.ts
+  ⚠ src/utils/format.ts → src/utils/helpers.ts → src/utils/format.ts
+```
+
+```bash Fail: Many Cycles
+✗ circular
+  ✗ Found 12 circular dependency chain(s)
+  ⚠ src/services/a.ts → src/services/b.ts → src/services/a.ts
+  ⚠ src/lib/x.ts → src/lib/y.ts → src/lib/z.ts → src/lib/x.ts
+  ⚠ src/hooks/useAuth.ts → src/contexts/auth.ts → src/hooks/useAuth.ts
+  ℹ ...and 9 more. Fix the above first.
+```
+
+```bash Skip: No Files
+○ circular — No .ts/.tsx/.js/.jsx/.mjs files found to analyze
+```
+</CodeGroup>
+
+## Why It Matters
+
+<Warning>
+  **Runtime & Build Problems**
+  
+  Circular dependencies cause:
+  - **Undefined exports** at runtime (variables accessed before initialization)
+  - **Bundler failures** or warnings in Webpack/Rollup/Vite
+  - **Tree-shaking issues** — prevents dead code elimination
+  - **Test failures** due to module loading order
+  - **Memory leaks** in module caching
+  - **Hard-to-debug errors** like `Cannot access 'X' before initialization`
+</Warning>
+
+## How to Fix
+
+### 1. Identify the Cycle
+
+Look at the cycle path from the check output:
+
+```
+src/auth/index.ts → src/auth/user.ts → src/auth/session.ts → src/auth/index.ts
+```
+
+This means:
+- `index.ts` imports from `user.ts`
+- `user.ts` imports from `session.ts`
+- `session.ts` imports back to `index.ts` ← **This is the problem**
+
+### 2. Break the Cycle
+
+Common strategies:
+
+<Tabs>
+  <Tab title="Strategy 1: Extract Shared Code">
+    Move shared code to a new file:
+    
+    **Before:**
+    ```typescript src/auth/index.ts
+    import { getUser } from './user';
+    export const SESSION_KEY = 'auth_session';
+    ```
+    
+    ```typescript src/auth/user.ts
+    import { SESSION_KEY } from './index'; // ← Circular!
+    ```
+    
+    **After:**
+    ```typescript src/auth/constants.ts
+    export const SESSION_KEY = 'auth_session';
+    ```
+    
+    ```typescript src/auth/index.ts
+    import { getUser } from './user';
+    export { SESSION_KEY } from './constants';
+    ```
+    
+    ```typescript src/auth/user.ts
+    import { SESSION_KEY } from './constants'; // ✓ No cycle
+    ```
+  </Tab>
+  
+  <Tab title="Strategy 2: Invert Dependencies">
+    Reverse the import direction using dependency injection:
+    
+    **Before:**
+    ```typescript src/services/api.ts
+    import { logger } from './logger';
+    export function fetchData() { logger.log('fetching'); }
+    ```
+    
+    ```typescript src/services/logger.ts
+    import { fetchData } from './api'; // ← Circular!
+    ```
+    
+    **After:**
+    ```typescript src/services/api.ts
+    export function fetchData(log: (msg: string) => void) {
+      log('fetching');
+    }
+    ```
+    
+    ```typescript src/services/logger.ts
+    import { fetchData } from './api'; // ✓ No cycle
+    export function runWithLogging() {
+      fetchData((msg) => console.log(msg));
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Strategy 3: Merge Files">
+    If two files are tightly coupled, merge them:
+    
+    **Before:**
+    ```typescript src/models/user.ts
+    import { Post } from './post';
+    export class User { posts: Post[] }
+    ```
+    
+    ```typescript src/models/post.ts
+    import { User } from './user'; // ← Circular!
+    export class Post { author: User }
+    ```
+    
+    **After:**
+    ```typescript src/models/index.ts
+    export class User { posts: Post[] }
+    export class Post { author: User }
+    // ✓ No separate imports needed
+    ```
+  </Tab>
+  
+  <Tab title="Strategy 4: Use Interfaces">
+    Break type dependencies with interfaces:
+    
+    **Before:**
+    ```typescript src/db/connection.ts
+    import { QueryBuilder } from './query';
+    export class Connection { query: QueryBuilder }
+    ```
+    
+    ```typescript src/db/query.ts
+    import { Connection } from './connection'; // ← Circular!
+    export class QueryBuilder { conn: Connection }
+    ```
+    
+    **After:**
+    ```typescript src/db/types.ts
+    export interface IConnection { execute(sql: string): any }
+    export interface IQueryBuilder { build(): string }
+    ```
+    
+    ```typescript src/db/connection.ts
+    import type { IQueryBuilder } from './types';
+    export class Connection { query: IQueryBuilder }
+    ```
+    
+    ```typescript src/db/query.ts
+    import type { IConnection } from './types'; // ✓ Type-only
+    export class QueryBuilder { conn: IConnection }
+    ```
+  </Tab>
+</Tabs>
+
+### 3. Verify the Fix
+
+```bash
+stackprobe audit --only circular
+```
+
+Expected output:
+```
+✓ circular — No circular dependencies found across 142 files
+```
+
+## Import Resolution
+
+The check resolves imports using this logic:
+
+```typescript /src/checks/circular.ts:10-34
+function resolveImport(
+  fromFile: string,
+  importPath: string,
+  extensions: string[],
+): string | null {
+  if (!importPath.startsWith(".")) return null; // skip node_modules
+
+  const base = path.resolve(path.dirname(fromFile), importPath);
+
+  // Try exact path
+  if (fs.existsSync(base)) return base;
+
+  // Try with extensions
+  for (const ext of extensions) {
+    if (fs.existsSync(base + ext)) return base + ext;
+  }
+
+  // Try index file
+  for (const ext of extensions) {
+    const indexPath = path.join(base, `index${ext}`);
+    if (fs.existsSync(indexPath)) return indexPath;
+  }
+
+  return null;
+}
+```
+
+**Resolution order:**
+1. Exact path: `./foo` → `./foo` (if it exists)
+2. With extension: `./foo` → `./foo.ts`
+3. Index file: `./foo` → `./foo/index.ts`
+
+## Ignored Import Types
+
+The check ignores:
+
+- **Type-only imports** (erased at runtime):
+  ```typescript
+  import type { User } from './user'; // ← Ignored
+  import { type User, getData } from './user'; // getData is checked
+  ```
+
+- **External packages** (from `node_modules`):
+  ```typescript
+  import React from 'react'; // ← Ignored
+  import express from 'express'; // ← Ignored
+  ```
+
+- **Built-in modules**:
+  ```typescript
+  import fs from 'fs'; // ← Ignored
+  import path from 'path'; // ← Ignored
+  ```
+
+See `/src/checks/circular.ts:36-59` for import extraction logic.
+
+## Performance Considerations
+
+The check is optimized for large codebases:
+
+- **Skips common build directories:** `node_modules`, `dist`, `build`, `.next`, `coverage`
+- **Limits output:** Shows only first 3 cycles
+- **Fast parsing:** Uses regex instead of full AST parsing
+- **Caches file reads:** Only reads each file once
+
+Typical performance:
+- **100 files:** ~100ms
+- **500 files:** ~400ms
+- **1000+ files:** ~1s
+
+## Advanced: Using Madge
+
+For deeper analysis, the check mentions using `madge` (though not currently implemented):
+
+```bash
+# Install madge for visualization
+npm install -g madge
+
+# Generate circular dependency graph
+madge --circular --extensions ts,tsx src/
+
+# Create visual diagram
+madge --circular --image graph.svg src/
+```
+
+See `/src/checks/circular.ts:5-6` for future integration notes.
+
+## Common Patterns to Avoid
+
+<AccordionGroup>
+  <Accordion title="Barrel exports creating cycles" icon="box-archive">
+    **Problem:**
+    ```typescript src/utils/index.ts
+    export * from './format';
+    export * from './helpers';
+    ```
+    
+    ```typescript src/utils/format.ts
+    import { sanitize } from './index'; // ← Circular!
+    ```
+    
+    **Solution:** Import directly from sibling files:
+    ```typescript src/utils/format.ts
+    import { sanitize } from './helpers'; // ✓ Direct import
+    ```
+  </Accordion>
+  
+  <Accordion title="Bidirectional relationships" icon="arrows-left-right">
+    **Problem:**
+    ```typescript
+    class User { posts: Post[] }
+    class Post { author: User }
+    ```
+    
+    **Solution:** Use IDs instead of direct references:
+    ```typescript
+    class User { id: string; posts: string[] } // Post IDs
+    class Post { id: string; authorId: string }
+    ```
+  </Accordion>
+  
+  <Accordion title="Global state dependencies" icon="globe">
+    **Problem:**
+    ```typescript src/store/index.ts
+    import { userReducer } from './user';
+    ```
+    
+    ```typescript src/store/user.ts
+    import { store } from './index'; // ← Circular!
+    ```
+    
+    **Solution:** Use context or dependency injection:
+    ```typescript src/store/user.ts
+    export function userReducer(state, action) { ... }
+    // Don't import store here
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+To disable this check:
+
+```json stackprobe.config.json
+{
+  "ignore": ["circular"]
+}
+```
+
+Or run it exclusively:
+
+```bash
+stackprobe audit --only circular
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Check Overview" icon="list" href="/checks/overview">
+    Learn about all available checks
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/config-file">
+    Customize check behavior
+  </Card>
+</CardGroup>

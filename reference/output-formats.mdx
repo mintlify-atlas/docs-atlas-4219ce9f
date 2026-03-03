@@ -1,0 +1,283 @@
+---
+title: Output Formats
+description: Understanding StackProbe output formats for human and machine consumption
+---
+
+## Overview
+
+StackProbe supports two output formats:
+1. **Human-readable format** (default) — colored terminal output with icons and formatting
+2. **JSON format** — structured data for programmatic processing
+
+## Human-Readable Format
+
+The default output format is designed for terminal viewing with ANSI colors and icons.
+
+### Example Output
+
+```
+🔍 stackprobe — auditing your project...
+
+✅ license        PASS  (45ms)
+
+⚠  deps           WARN  (123ms)
+  ⚠ Found 3 outdated dependencies
+  → Run 'npm outdated' for details
+
+✗  circular       FAIL  (89ms)
+  ✗ Circular dependency detected: src/foo.ts → src/bar.ts → src/foo.ts
+
+— engine         SKIP
+
+────────────────────────────────────────────────
+Summary  1 passed  1 warned  1 failed  1 skipped  in 257ms
+
+Audit failed. Fix the issues above before shipping.
+```
+
+### Output Structure
+
+**Header:**
+```
+🔍 stackprobe — auditing your project...
+```
+
+**Check Results:**
+```
+[icon] [check-name]  [status]  [(duration)]
+  [prefix] [message]
+  [prefix] [message]
+```
+
+**Summary:**
+```
+────────────────────────────────────────────────
+Summary  [counts]  in [total-duration]ms
+
+[final-message]
+```
+
+### Status Icons and Colors
+
+| Status | Icon | Color | Label |
+|--------|------|-------|-------|
+| `pass` | ✅ | Green | PASS |
+| `warn` | ⚠  | Yellow | WARN |
+| `fail` | ✗  | Red | FAIL |
+| `skip` | —  | Dim | SKIP |
+
+**Implementation reference:** `reporter.ts:15-27`
+
+### Message Level Prefixes
+
+| Level | Prefix | Color | Usage |
+|-------|--------|-------|-------|
+| `info` | → | Cyan | Informational messages |
+| `warn` | ⚠ | Yellow | Warning messages |
+| `error` | ✗ | Red | Error messages |
+
+**Implementation reference:** `reporter.ts:29-33`
+
+### Summary Messages
+
+The final message varies based on results:
+
+**All passed:**
+```
+All checks passed. Ship it! 🚀
+```
+
+**Passed with warnings:**
+```
+Audit passed with warnings. Consider reviewing them.
+```
+
+**Failed:**
+```
+Audit failed. Fix the issues above before shipping.
+```
+
+**Implementation reference:** `reporter.ts:83-95`
+
+## JSON Format
+
+Use the `--json` flag to output structured JSON data.
+
+```bash
+stackprobe audit --json
+```
+
+### JSON Output Structure
+
+```json
+{
+  "results": [
+    {
+      "checkName": "license",
+      "status": "pass",
+      "messages": [],
+      "duration": 45
+    },
+    {
+      "checkName": "deps",
+      "status": "warn",
+      "messages": [
+        {
+          "level": "warn",
+          "text": "Found 3 outdated dependencies"
+        },
+        {
+          "level": "info",
+          "text": "Run 'npm outdated' for details"
+        }
+      ],
+      "duration": 123
+    },
+    {
+      "checkName": "circular",
+      "status": "fail",
+      "messages": [
+        {
+          "level": "error",
+          "text": "Circular dependency detected: src/foo.ts → src/bar.ts → src/foo.ts"
+        }
+      ],
+      "duration": 89
+    }
+  ],
+  "duration": 257
+}
+```
+
+### JSON Schema
+
+**Top-level object:**
+```typescript
+{
+  results: CheckResult[];
+  duration: number; // Total audit duration in ms
+}
+```
+
+**CheckResult interface:**
+```typescript
+interface CheckResult {
+  checkName: string;
+  status: "pass" | "warn" | "fail" | "skip";
+  messages: CheckMessage[];
+  duration?: number; // Check duration in ms
+}
+```
+
+**CheckMessage interface:**
+```typescript
+interface CheckMessage {
+  level: "info" | "warn" | "error";
+  text: string;
+}
+```
+
+**Implementation reference:** `runner.ts:9-19`
+
+### Parsing JSON Output
+
+**Using jq:**
+
+```bash
+# Get all failed checks
+stackprobe audit --json | jq '.results[] | select(.status == "fail")"
+
+# Count failures
+stackprobe audit --json | jq '[.results[] | select(.status == "fail")] | length"
+
+# Get error messages only
+stackprobe audit --json | jq '.results[].messages[] | select(.level == "error") | .text"
+
+# Get total duration
+stackprobe audit --json | jq '.duration"
+```
+
+**Using Node.js:**
+
+```javascript
+import { execSync } from 'child_process';
+
+const output = execSync('stackprobe audit --json', { encoding: 'utf-8' });
+const results = JSON.parse(output);
+
+const failures = results.results.filter(r => r.status === 'fail');
+const hasFailures = failures.length > 0;
+
+console.log(`Total checks: ${results.results.length}`);
+console.log(`Failed checks: ${failures.length}`);
+console.log(`Duration: ${results.duration}ms`);
+
+if (hasFailures) {
+  console.error('Failed checks:');
+  failures.forEach(f => {
+    console.error(`- ${f.checkName}`);
+    f.messages.forEach(m => console.error(`  ${m.level}: ${m.text}`));
+  });
+}
+```
+
+**Using Python:**
+
+```python
+import json
+import subprocess
+
+result = subprocess.run(
+    ['stackprobe', 'audit', '--json'],
+    capture_output=True,
+    text=True
+)
+
+data = json.loads(result.stdout)
+
+failures = [r for r in data['results'] if r['status'] == 'fail']
+
+print(f"Total checks: {len(data['results'])}")
+print(f"Failed checks: {len(failures)}")
+print(f"Duration: {data['duration']}ms")
+
+for check in failures:
+    print(f"\nFailed: {check['checkName']}")
+    for msg in check['messages']:
+        print(f"  {msg['level']}: {msg['text']}")
+```
+
+## Comparison
+
+| Feature | Human-Readable | JSON |
+|---------|----------------|------|
+| **Colors** | Yes | No |
+| **Icons** | Yes | No |
+| **Parseable** | No | Yes |
+| **CI-friendly** | No | Yes |
+| **Terminal viewing** | Yes | No |
+| **Flag required** | No (default) | `--json` |
+
+## Best Practices
+
+<Tip>
+**Use JSON in CI/CD** — The JSON format is ideal for automated processing, custom reporting, and integration with other tools.
+</Tip>
+
+<Tip>
+**Use human-readable locally** — The default format is optimized for quick visual scanning during development.
+</Tip>
+
+**Save JSON results:**
+```bash
+stackprobe audit --json > audit-$(date +%Y%m%d).json
+```
+
+**Compare results over time:**
+```bash
+# Run audit and save
+stackprobe audit --json > audit-new.json
+
+# Compare with previous
+jq -s '.[0].results as $old | .[1].results as $new | ...' audit-old.json audit-new.json
+```

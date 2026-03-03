@@ -1,0 +1,131 @@
+---
+title: Configuration File
+description: Configure StackProbe using stackprobe.config.js
+---
+
+StackProbe can be configured using a `stackprobe.config.js` file in your project root. This allows you to customize which checks run, how failures are handled, and more.
+
+## Creating a Config File
+
+Create a `stackprobe.config.js` file in the root of your project:
+
+```javascript stackprobe.config.js
+/** @type {import('stackprobe').StackProbeConfig} */
+module.exports = {
+  ignore: [],
+  failOn: "error",
+};
+```
+
+The JSDoc type annotation provides autocomplete support in VS Code and other editors.
+
+## Configuration Options
+
+StackProbe uses the `StackProbeConfig` interface defined below:
+
+```typescript
+interface StackProbeConfig {
+  ignore?: string[];        // check names to skip
+  only?: string[];          // run ONLY these checks
+  failOn?: "warn" | "error"; // default: error only
+}
+```
+
+### ignore
+
+<ParamField path="ignore" type="string[]" default="[]">
+  List of check names to skip during the audit.
+
+  Available checks:
+  - `license` - License compatibility check
+  - `env` - Environment variable validation
+  - `deps` - Dependency analysis
+  - `engine` - Node.js engine version check
+  - `circular` - Circular dependency detection
+
+  **Example:**
+  ```javascript
+  module.exports = {
+    ignore: ['license', 'circular'],
+  };
+  ```
+</ParamField>
+
+### only
+
+<ParamField path="only" type="string[]">
+  Run ONLY these specific checks. When set, this overrides the `ignore` option.
+
+  Available checks:
+  - `license` - License compatibility check
+  - `env` - Environment variable validation
+  - `deps` - Dependency analysis
+  - `engine` - Node.js engine version check
+  - `circular` - Circular dependency detection
+
+  **Example:**
+  ```javascript
+  module.exports = {
+    only: ['deps', 'env'],
+  };
+  ```
+</ParamField>
+
+### failOn
+
+<ParamField path="failOn" type="'warn' | 'error'" default="'error'">
+  Determines when StackProbe should exit with a non-zero status code in CI environments.
+
+  - `error` (default) - Exit with code 1 only on errors
+  - `warn` - Exit with code 1 on warnings and errors
+
+  **Example:**
+  ```javascript
+  module.exports = {
+    failOn: 'warn',
+  };
+  ```
+</ParamField>
+
+## Full Example
+
+```javascript stackprobe.config.js
+/** @type {import('stackprobe').StackProbeConfig} */
+module.exports = {
+  // Skip license and circular dependency checks
+  ignore: ['license', 'circular'],
+
+  // Fail on both warnings and errors
+  failOn: 'warn',
+};
+```
+
+## Running Specific Checks
+
+To run only dependency and environment checks:
+
+```javascript stackprobe.config.js
+/** @type {import('stackprobe').StackProbeConfig} */
+module.exports = {
+  only: ['deps', 'env'],
+};
+```
+
+## Default Configuration
+
+If no config file is present, StackProbe uses these defaults:
+
+```javascript
+{
+  ignore: [],
+  failOn: 'error',
+}
+```
+
+## Config Loading
+
+StackProbe looks for `stackprobe.config.js` in the current working directory. If the file cannot be loaded or parsed, a warning is shown and default values are used:
+
+```
+⚠  Could not load stackprobe.config.js — using defaults
+```

@@ -1,80 +1,408 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Run your first StackProbe audit in minutes
 ---
 
-## Get started in three steps
+# Quickstart Guide
 
-Get your documentation site running locally and make your first customization.
+Get from zero to your first successful audit in under 5 minutes.
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+## Prerequisites
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Node.js 16+" icon="node-js">
+    Check: `node --version`
+  </Card>
+  <Card title="A Node.js Project" icon="folder">
+    Any project with `package.json`
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Your First Audit
+
+<Steps>
+  <Step title="Navigate to Your Project">
+    Open your terminal and `cd` into any JavaScript or TypeScript project:
+
+    ```bash
+    cd ~/projects/my-app
+    ```
+
+    <Tip>
+      Don't have a project handy? Clone a sample repo:
+      ```bash
+      git clone https://github.com/aryanjha256/stackprobe.git
+      cd stackprobe
+      ```
+    </Tip>
+  </Step>
+
+  <Step title="Run the Audit">
+    Execute StackProbe with a single command:
+
+    ```bash
+    npx stackprobe audit
+    ```
+
+    <Note>
+      First run may take a few seconds as `npx` downloads StackProbe. Subsequent runs are instant.
+    </Note>
+
+    You'll see output like:
+
+    ```
+    🔍 stackprobe — auditing your project...
+
+    ✅ license      PASS  (12ms)
+      → LICENSE found (MIT)
+
+    ✅ env          PASS  (8ms)
+      → .env and .env.example are in sync
+
+    ⚠  deps         WARN  (1847ms)
+      ⚠ axios is 1 major version(s) behind (you: ^0.27.0, latest: 1.6.8)
+      → typescript has a new major version available (you: ^4.9.5, latest: 5.9.3)
+      → Only checked 20 of 32 dependencies to avoid rate limiting
+
+    ✅ engine       PASS  (5ms)
+      → engines.node = ">=16.0.0" — looks good
+
+    ✅ circular     PASS  (234ms)
+      → No circular dependencies found across 47 files
+
+    ────────────────────────────────────────────────
+    Summary  4 passed  1 warned  in 2106ms
+
+    Audit passed with warnings. Consider reviewing them.
+    ```
+  </Step>
+
+  <Step title="Understand the Results">
+    StackProbe runs 5 checks and reports:
+
+    - **✅ PASS**: Everything looks good
+    - **⚠ WARN**: Issues to review (won't fail CI by default)
+    - **✗ FAIL**: Critical issues that need fixing
+    - **— SKIP**: Check not applicable to this project
+
+    Each check shows:
+    - Status icon and name
+    - Duration in milliseconds
+    - Detailed messages with → info, ⚠ warnings, ✗ errors
+  </Step>
+</Steps>
+
+## Common First Commands
+
+### Run All Checks (Default)
+
+```bash
+stackprobe audit
+```
+
+Runs all 5 checks: `deps`, `env`, `license`, `engine`, `circular`
+
+### Run Specific Checks Only
+
+```bash
+stackprobe audit --only deps,env
+```
+
+Useful when you only care about certain checks:
+
+<CodeGroup>
+```bash Dependencies only
+stackprobe audit --only deps
+```
+
+```bash Env and License
+stackprobe audit --only env,license
+```
+
+```bash Everything except circular
+stackprobe audit --only deps,env,license,engine
+```
+</CodeGroup>
+
+### JSON Output for CI
+
+```bash
+stackprobe audit --json
+```
+
+Outputs machine-readable JSON:
+
+```json
+{
+  "results": [
+    {
+      "checkName": "license",
+      "status": "pass",
+      "messages": [
+        {
+          "level": "info",
+          "text": "LICENSE found (MIT)"
+        }
+      ],
+      "duration": 12
+    },
+    {
+      "checkName": "deps",
+      "status": "warn",
+      "messages": [
+        {
+          "level": "warn",
+          "text": "axios is 1 major version(s) behind (you: ^0.27.0, latest: 1.6.8)"
+        }
+      ],
+      "duration": 1847
+    }
+  ],
+  "duration": 2106
+}
+```
+
+Perfect for parsing in CI scripts.
+
+## Understanding Check Results
+
+<AccordionGroup>
+  <Accordion title="Dependencies (deps)" icon="box">
+    Checks npm packages against the registry.
+
+    **Example output:**
+    ```
+    ⚠  deps         WARN  (1523ms)
+      ⚠ lodash is 3 major version(s) behind (you: ^1.0.0, latest: 4.17.21)
+      → axios has a new major version available (you: ^0.27.0, latest: 1.6.8)
+    ```
+
+    **What to do:**
+    - Update packages 2+ major versions behind (security risk)
+    - Review new major versions for breaking changes
+    - Check your `package.json` and run `npm update`
+
+    <Note>
+      StackProbe checks up to 20 packages to avoid npm rate limiting. For full audits, use `npm audit` or `yarn audit`.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Environment (env)" icon="key">
+    Compares `.env` and `.env.example` for drift.
+
+    **Example output:**
+    ```
+    ⚠  env          WARN  (8ms)
+      ⚠ Keys in .env but missing from .env.example: JWT_SECRET, API_KEY
+      ⚠ Keys in .env.example but missing from your .env: DATABASE_URL
+      → These may be required — check with your team or docs
+    ```
+
+    **What to do:**
+    - Add missing keys to `.env.example` (without real values)
+    - Add missing keys to `.env` (ask team for values)
+    - Keep both files in sync for team onboarding
+  </Accordion>
+
+  <Accordion title="License" icon="file-contract">
+    Checks for a LICENSE file in your project root.
+
+    **Example output:**
+    ```
+    ⚠  license      WARN  (5ms)
+      ⚠ No LICENSE file found — open source projects should have one
+      → Add a LICENSE file. Not sure which? → https://choosealicense.com
+    ```
+
+    **What to do:**
+    - Visit [choosealicense.com](https://choosealicense.com) to pick a license
+    - Add a `LICENSE` file to your project root
+    - Common choices: MIT (permissive), Apache 2.0 (patent protection), GPL (copyleft)
+  </Accordion>
+
+  <Accordion title="Node Engine" icon="server">
+    Validates your `package.json` engines field.
+
+    **Example output:**
+    ```
+    ⚠  engine       WARN  (4ms)
+      ⚠ engines.node specifies >= 14, but Node 14 is End-of-Life
+      → Consider bumping to >= 18 (current LTS)
+    ```
+
+    **What to do:**
+    - Update `engines.node` in `package.json`:
+      ```json
+      {
+        "engines": {
+          "node": ">=18.0.0"
+        }
+      }
+      ```
+    - Test your app on the new Node version
+    - Update your CI/CD to use Node 18+
+  </Accordion>
+
+  <Accordion title="Circular Dependencies" icon="arrow-rotate-right">
+    Detects import cycles in your source code.
+
+    **Example output:**
+    ```
+    ✗  circular     FAIL  (234ms)
+      ✗ Found 2 circular dependency chain(s)
+      ⚠ src/services/auth.ts → src/models/user.ts → src/services/auth.ts
+      ⚠ src/utils/helpers.ts → src/config/index.ts → src/utils/helpers.ts
+    ```
+
+    **What to do:**
+    - Refactor to break the cycle:
+      - Extract shared code to a new file
+      - Use dependency injection
+      - Move types to separate files
+    - Circular deps can cause:
+      - Runtime errors (undefined imports)
+      - Hard-to-debug initialization bugs
+      - Module load order issues
+  </Accordion>
+</AccordionGroup>
+
+## Exit Codes
+
+StackProbe returns exit codes for CI/CD integration:
+
+<ResponseField name="0" type="Success">
+  All checks passed or warned (warnings don't fail by default)
+</ResponseField>
+
+<ResponseField name="1" type="Failure">
+  One or more checks failed (status: `fail`)
+</ResponseField>
+
+**Example CI usage:**
+
+```bash
+# Fails the build only if critical issues found
+stackprobe audit || exit 1
+```
+
+## What to Do With Results
+
+<Steps>
+  <Step title="Fix Critical Issues (FAIL)">
+    Address any checks with ✗ FAIL status immediately:
+    - Circular dependencies
+    - Incompatible Node versions
+    - Missing critical environment variables
+
+    These can cause runtime errors or deployment failures.
+  </Step>
+
+  <Step title="Review Warnings (WARN)">
+    Warnings won't fail your build but should be addressed:
+    - Outdated dependencies (security updates)
+    - Missing LICENSE file (legal issues)
+    - Env file drift (team onboarding pain)
+
+    Schedule time to fix these before they become problems.
+  </Step>
+
+  <Step title="Add to CI/CD">
+    Once your project passes, add StackProbe to your CI:
+
+    ```yaml .github/workflows/audit.yml
+    name: StackProbe Audit
+    on: [push, pull_request]
+
+    jobs:
+      audit:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v3
+          - uses: actions/setup-node@v3
+            with:
+              node-version: 18
+          - run: npx stackprobe audit
+    ```
+
+    See [CI Integration](/usage/ci-integration) for more.
+  </Step>
+
+  <Step title="Configure for Your Workflow">
+    Customize which checks run and when they fail:
+
+    ```js stackprobe.config.js
+    module.exports = {
+      // Skip checks you don't need
+      ignore: ['license'],
+
+      // Or run only specific checks
+      // only: ['deps', 'env'],
+
+      // Fail on warnings in CI (default: 'error')
+      failOn: 'warn"
+    };
+    ```
+
+    See [Configuration](/configuration/config-file) for all options.
+  </Step>
+</Steps>
+
+## Real-World Example
+
+Here's a typical first-time audit on a real project:
+
+```
+🔍 stackprobe — auditing your project...
+
+✅ license      PASS  (10ms)
+  → LICENSE found (MIT)
+
+⚠  env          WARN  (7ms)
+  ⚠ Keys in .env but missing from .env.example: STRIPE_SECRET_KEY
+  → Create .env.example with keys but no real values so others can onboard
+
+⚠  deps         WARN  (2341ms)
+  ⚠ react is 2 major version(s) behind (you: ^16.14.0, latest: 18.2.0)
+  ⚠ next is 3 major version(s) behind (you: ^10.0.0, latest: 14.1.0)
+  → Only checked 20 of 67 dependencies to avoid rate limiting
+
+✅ engine       PASS  (5ms)
+  → engines.node = ">=16.0.0" — looks good
+
+✗  circular     FAIL  (445ms)
+  ✗ Found 1 circular dependency chain(s)
+  ⚠ src/components/Header.tsx → src/lib/auth.ts → src/components/Header.tsx
+
+────────────────────────────────────────────────
+Summary  2 passed  2 warned  1 failed  in 2808ms
+
+Audit failed. Fix the issues above before shipping.
+```
+
+**Action items from this audit:**
+
+1. Break the circular dependency in Header.tsx ↔ auth.ts
+2. Add `STRIPE_SECRET_KEY` to `.env.example`
+3. Schedule React/Next.js upgrade (breaking changes expected)
+4. Re-run audit after fixes: `stackprobe audit`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/configuration/config-file">
+    Customize StackProbe for your project
+  </Card>
+  <Card title="CI Integration" icon="check-double" href="/usage/ci-integration">
+    Add to GitHub Actions, GitLab CI, etc.
+  </Card>
+  <Card title="Check Reference" icon="book" href="/checks/overview">
+    Deep dive into each check type
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/reference/commands">
+    All commands and options
+  </Card>
+</CardGroup>
+
+<Tip>
+  **Pro tip**: Run `stackprobe audit` before every release or deployment. Catch issues when they're easiest to fix.
+</Tip>

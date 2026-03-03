@@ -1,0 +1,149 @@
+---
+title: CLI Options
+description: Command-line options for the StackProbe audit command
+---
+
+StackProbe provides several command-line flags to customize audit behavior without modifying your config file.
+
+## Basic Usage
+
+```bash
+stackprobe audit
+```
+
+Runs all checks using settings from `stackprobe.config.js` (or defaults if no config exists).
+
+## Available Options
+
+### --json
+
+<ParamField path="--json" type="flag">
+  Output results in JSON format instead of human-readable text. Useful for CI/CD pipelines and automated processing.
+
+  **Example:**
+  ```bash
+  stackprobe audit --json
+  ```
+
+  **Use case:**
+  - Parse results in CI scripts
+  - Generate custom reports
+  - Integrate with other tools
+</ParamField>
+
+### --only
+
+<ParamField path="--only" type="string">
+  Run only specific checks. Accepts a comma-separated list of check names. This overrides the `only` option in your config file.
+
+  Available checks:
+  - `deps` - Dependency analysis
+  - `env` - Environment variable validation
+  - `license` - License compatibility check
+  - `engine` - Node.js engine version check
+  - `circular` - Circular dependency detection
+
+  **Example:**
+  ```bash
+  stackprobe audit --only deps,env,license
+  ```
+
+  **Multiple checks:**
+  ```bash
+  stackprobe audit --only deps,circular
+  ```
+</ParamField>
+
+### --fix
+
+<ParamField path="--fix" type="flag">
+  Attempt to automatically fix issues where possible.
+
+  **Status:** Coming soon
+
+  **Example:**
+  ```bash
+  stackprobe audit --fix
+  ```
+
+  This flag is currently recognized by the CLI but auto-fix functionality is not yet implemented.
+</ParamField>
+
+## Combining Options
+
+You can combine multiple flags in a single command:
+
+```bash
+stackprobe audit --json --only deps,env
+```
+
+This runs only dependency and environment checks, outputting results in JSON format.
+
+## CI/CD Examples
+
+### GitHub Actions
+
+```yaml .github/workflows/audit.yml
+name: StackProbe Audit
+
+on: [push, pull_request]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - run: npm install -g stackprobe
+      - run: stackprobe audit --json
+```
+
+### GitLab CI
+
+```yaml .gitlab-ci.yml
+stackprobe:
+  stage: test
+  script:
+    - npm install -g stackprobe
+    - stackprobe audit --json
+  only:
+    - merge_requests
+    - main
+```
+
+### Run Only Critical Checks in CI
+
+```bash
+stackprobe audit --only deps,engine --json
+```
+
+## Option Priority
+
+When the same option is specified in multiple places, CLI flags take precedence:
+
+1. CLI flags (highest priority)
+2. `stackprobe.config.js`
+3. Default values (lowest priority)
+
+**Example:**
+
+If your config file specifies `only: ['deps']` but you run:
+
+```bash
+stackprobe audit --only env,license
+```
+
+StackProbe will run only the `env` and `license` checks (CLI flag wins).
+
+## Command Structure
+
+The full command structure is:
+
+```bash
+stackprobe audit [options]
+```
+
+Where `[options]` can be any combination of:
+- `--json`
+- `--only <checks>`
+- `--fix`

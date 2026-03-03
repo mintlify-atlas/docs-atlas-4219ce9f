@@ -1,0 +1,109 @@
+---
+title: Commands
+description: Complete CLI command reference for StackProbe
+---
+
+## stackprobe audit
+
+Run all checks on the current project.
+
+```bash
+stackprobe audit [options]
+```
+
+### Options
+
+#### `--json`
+
+**Type:** `boolean`  
+**Default:** `false`
+
+Output results as JSON instead of the human-readable format. Useful for CI pipelines and automated processing.
+
+```bash
+stackprobe audit --json
+```
+
+**Use cases:**
+- Parsing results in CI/CD workflows
+- Integration with custom tooling
+- Storing audit results in structured format
+
+#### `--fix`
+
+**Type:** `boolean`  
+**Default:** `false`  
+**Status:** Coming soon
+
+Attempt to auto-fix issues where possible.
+
+```bash
+stackprobe audit --fix
+```
+
+<Note>
+The `--fix` flag is currently in development and not yet functional.
+</Note>
+
+#### `--only <checks>`
+
+**Type:** `string`  
+**Format:** Comma-separated list  
+**Available checks:** `deps`, `env`, `license`, `engine`, `circular`
+
+Run only specific checks instead of all available checks.
+
+```bash
+stackprobe audit --only deps,env
+```
+
+**Examples:**
+
+```bash
+# Run only dependency check
+stackprobe audit --only deps
+
+# Run multiple specific checks
+stackprobe audit --only deps,env,license
+
+# Combine with JSON output
+stackprobe audit --only circular --json
+```
+
+### Available Checks
+
+| Check Name | Description |
+|------------|-------------|
+| `license` | Validates project license configuration |
+| `env` | Checks environment variable setup |
+| `deps` | Audits project dependencies |
+| `engine` | Verifies Node.js engine compatibility |
+| `circular` | Detects circular dependencies |
+
+### Usage Examples
+
+**Basic audit:**
+```bash
+stackprobe audit
+```
+
+**JSON output for CI:**
+```bash
+stackprobe audit --json
+```
+
+**Run specific checks:**
+```bash
+stackprobe audit --only deps,env
+```
+
+**Combine options:**
+```bash
+stackprobe audit --only circular --json
+```
+
+### Configuration
+
+The `--only` flag can be combined with the `ignore` option in your configuration file. When both are present, `--only` takes precedence and the `ignore` list is not applied.
+
+See the [Configuration](/configuration/config-file) page for more details on configuring which checks run by default.

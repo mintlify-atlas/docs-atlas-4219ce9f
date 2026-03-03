@@ -1,0 +1,266 @@
+---
+title: "Dependencies Check"
+description: "Detect outdated npm packages and major version drift"
+icon: "cube"
+---
+
+## What It Does
+
+The dependencies check scans your `package.json` for outdated npm packages by comparing installed versions against the latest published versions on npm registry.
+
+**Key Features:**
+- Fetches latest versions from `registry.npmjs.org`
+- Checks both `dependencies` and `devDependencies`
+- Warns when packages are 2+ major versions behind
+- Limits to 20 packages to avoid rate limiting
+
+<Note>
+  **Source:** `/src/checks/dependencies.ts`
+</Note>
+
+## When It Runs
+
+This check runs when:
+- ✅ A `package.json` file exists in your project
+- ❌ **Skips** if no `package.json` is found
+- ❌ **Skips** if the project has zero dependencies
+
+## Check Logic
+
+The check follows this process:
+
+1. **Parse** `package.json` and merge deps + devDeps
+2. **Fetch** latest versions for up to 20 packages from npm registry
+3. **Compare** major versions:
+   - Extract major version from installed range (strips `^`, `~`, `>=`)
+   - Parse major version from latest release
+   - Calculate how many major versions behind
+4. **Report** findings:
+   - **Warn** if 2+ major versions behind
+   - **Info** if 1 major version behind
+   - **Pass** if up to date
+
+<Accordion title="View Source Code" icon="code">
+```typescript /src/checks/dependencies.ts:39-118
+export async function checkDependencies(): Promise<CheckResult> {
+  const pkgPath = path.join(process.cwd(), "package.json");
+
+  if (!fs.existsSync(pkgPath)) {
+    return {
+      checkName: "deps",
+      status: "skip",
+      messages: [{ level: "info", text: "No package.json found" }],
+    };
+  }
+
+  const pkg: PackageJson = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+  const allDeps = {
+    ...pkg.dependencies,
+    ...pkg.devDependencies,
+  };
+
+  const depEntries = Object.entries(allDeps);
+
+  if (depEntries.length === 0) {
+    return {
+      checkName: "deps",
+      status: "pass",
+      messages: [{ level: "info", text: "No dependencies found" }],
+    };
+  }
+
+  const messages: CheckResult["messages"] = [];
+  let status: CheckResult["status"] = "pass";
+
+  // Check up to 20 deps to avoid hammering npm registry
+  const toCheck = depEntries.slice(0, 20);
+
+  const results = await Promise.all(
+    toCheck.map(async ([name, installedRange]) => {
+      const latest = await fetchLatestVersion(name);
+      return { name, installedRange, latest };
+    }),
+  );
+
+  for (const { name, installedRange, latest } of results) {
+    if (!latest) continue;
+
+    const installedMajor = parseMajor(installedRange);
+    const latestMajor = parseMajor(latest);
+
+    if (installedMajor === null || latestMajor === null) continue;
+
+    const majorsBehind = latestMajor - installedMajor;
+
+    if (majorsBehind >= 2) {
+      status = "warn";
+      messages.push({
+        level: "warn",
+        text: `${name} is ${majorsBehind} major version(s) behind (you: ${installedRange}, latest: ${latest})`,
+      });
+    } else if (majorsBehind === 1) {
+      messages.push({
+        level: "info",
+        text: `${name} has a new major version available (you: ${installedRange}, latest: ${latest})`,
+      });
+    }
+  }
+
+  if (depEntries.length > 20) {
+    messages.push({
+      level: "info",
+      text: `Only checked 20 of ${depEntries.length} dependencies to avoid rate limiting`,
+    });
+  }
+
+  if (messages.length === 0) {
+    messages.push({
+      level: "info",
+      text: `All ${toCheck.length} checked dependencies are up to date`,
+    });
+  }
+
+  return { checkName: "deps", status, messages };
+}
+```
+</Accordion>
+
+## Example Output
+
+<CodeGroup>
+```bash Pass: All Up to Date
+✓ deps — All 12 checked dependencies are up to date
+```
+
+```bash Warn: Outdated Packages
+⚠ deps
+  ⚠ react is 2 major version(s) behind (you: ^16.0.0, latest: 18.3.1)
+  ⚠ webpack is 3 major version(s) behind (you: ^4.46.0, latest: 5.94.0)
+  ℹ express has a new major version available (you: ^4.18.0, latest: 5.0.0)
+  ℹ Only checked 20 of 47 dependencies to avoid rate limiting
+```
+
+```bash Skip: No package.json
+○ deps — No package.json found
+```
+</CodeGroup>
+
+## Why It Matters
+
+<Warning>
+  **Security & Stability Risks**
+  
+  Running severely outdated dependencies exposes your project to:
+  - Known security vulnerabilities
+  - Missing bug fixes and performance improvements
+  - Breaking changes when you eventually must upgrade
+  - Incompatibility with modern tools and libraries
+</Warning>
+
+## How to Fix
+
+### 1. Review the Warning
+
+Check what changed between versions:
+
+```bash
+npm view react versions
+npm view react@18.3.1
+```
+
+### 2. Update the Dependency
+
+<CodeGroup>
+```bash Update to Latest
+npm install react@latest
+```
+
+```bash Update with Version Range
+npm install react@^18.0.0
+```
+
+```bash Update Multiple Packages
+npm install react@latest webpack@latest
+```
+</CodeGroup>
+
+### 3. Test Thoroughly
+
+Major version bumps often include breaking changes:
+
+```bash
+npm test
+npm run build
+```
+
+### 4. Check Migration Guides
+
+Most popular packages provide upgrade guides:
+- React: https://react.dev/blog
+- Webpack: https://webpack.js.org/migrate/
+- Express: https://expressjs.com/en/guide/migrating-5.html
+
+<Note>
+  **Pro Tip:** Use tools like `npm-check-updates` for bulk updates:
+  
+  ```bash
+  npx npm-check-updates -u
+  npm install
+  ```
+</Note>
+
+## Rate Limiting
+
+To avoid overwhelming the npm registry, the check:
+- Limits to **20 packages** per run
+- Shows a notice if you have more dependencies
+- Sorts packages by order in `package.json`
+
+See `/src/checks/dependencies.ts:69-70` for implementation.
+
+## Version Parsing
+
+The check handles common semver patterns:
+
+```typescript /src/checks/dependencies.ts:32-37
+function parseMajor(version: string): number | null {
+  // Strip leading ^ ~ >= etc.
+  const clean = version.replace(/^[\^~>=<\s]+/, "").trim();
+  const major = parseInt(clean.split(".")[0], 10);
+  return isNaN(major) ? null : major;
+}
+```
+
+Supported formats:
+- `^18.0.0` → 18
+- `~2.1.3` → 2
+- `>=16.8.0` → 16
+- `14.x` → 14
+- `latest` → skipped
+
+## Configuration
+
+To disable this check:
+
+```json stackprobe.config.json
+{
+  "ignore": ["deps"]
+}
+```
+
+Or run it exclusively:
+
+```bash
+stackprobe audit --only deps
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Environment Check" icon="key" href="/checks/environment">
+    Validate your environment variable configuration
+  </Card>
+  <Card title="Engine Check" icon="server" href="/checks/engine">
+    Ensure Node.js version compatibility
+  </Card>
+</CardGroup>

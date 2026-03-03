@@ -1,0 +1,149 @@
+---
+title: Introduction
+description: Catch issues before they become production problems
+---
+
+# Welcome to StackProbe
+
+StackProbe is a CLI tool that audits your JavaScript and TypeScript projects for common issues that slip through code review and testing. One command gives you a comprehensive health check of your codebase.
+
+## The Problem It Solves
+
+Developers constantly discover issues the hard way:
+
+- A `.env` variable missing in production that crashes your app
+- A package 3 major versions behind with breaking changes
+- No license file when you need to open source
+- Mismatched Node engine versions between dev and production
+- Circular dependencies nobody noticed until runtime
+
+StackProbe catches all of this **before** you ship.
+
+<CardGroup cols={3}>
+  <Card title="Get Started" icon="rocket" href="/installation">
+    Install StackProbe in seconds
+  </Card>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Run your first audit in minutes
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/config-file">
+    Customize for your workflow
+  </Card>
+</CardGroup>
+
+## What StackProbe Checks
+
+StackProbe runs 5 core checks on every audit:
+
+<AccordionGroup>
+  <Accordion title="Dependencies" icon="box">
+    Scans your `package.json` dependencies against the npm registry to find:
+    - Packages multiple major versions behind
+    - New major versions available
+    - Outdated dependencies that may have security fixes
+
+    Checks up to 20 packages to avoid rate limiting.
+  </Accordion>
+
+  <Accordion title="Environment Variables" icon="key">
+    Compares `.env` and `.env.example` to catch:
+    - Keys in `.env` but missing from `.env.example` (undocumented)
+    - Keys in `.env.example` but missing from `.env` (missing locally)
+    - Missing `.env.example` entirely (risk of committing secrets)
+
+    Helps teams stay in sync and onboard faster.
+  </Accordion>
+
+  <Accordion title="License" icon="file-contract">
+    Checks for the presence of a LICENSE file:
+    - Detects MIT, Apache 2.0, GPL, ISC, BSD licenses
+    - Warns if no license found (critical for open source)
+    - Links to choosealicense.com for guidance
+  </Accordion>
+
+  <Accordion title="Node Engine" icon="server">
+    Validates your `package.json` engines field:
+    - Warns if `engines.node` is missing
+    - Detects End-of-Life Node versions (< 18)
+    - Checks if your current Node version satisfies requirements
+  </Accordion>
+
+  <Accordion title="Circular Dependencies" icon="arrow-rotate-right">
+    Builds a dependency graph of your source files to find:
+    - Import cycles that can cause runtime errors
+    - Hard-to-debug initialization issues
+    - Module load order problems
+
+    Uses a lightweight built-in analyzer (no external deps).
+  </Accordion>
+</AccordionGroup>
+
+## Real-World Example
+
+Run one command in any Node/JS project:
+
+```bash
+npx stackprobe audit
+```
+
+Get a clean, actionable report:
+
+```
+🔍 stackprobe — auditing your project...
+
+✅ license      PASS  (12ms)
+  → LICENSE found (MIT)
+
+⚠  deps         WARN  (1847ms)
+  ⚠ lodash is 3 major version(s) behind (you: ^1.0.0, latest: 4.17.21)
+  → axios has a new major version available (you: ^0.27.0, latest: 1.6.8)
+  → Only checked 20 of 45 dependencies to avoid rate limiting
+
+⚠  env          WARN  (8ms)
+  ⚠ Keys in .env but missing from .env.example: JWT_SECRET
+  → These may be required — check with your team or docs
+
+✅ engine       PASS  (5ms)
+  → engines.node = ">=16.0.0" — looks good
+
+✗  circular     FAIL  (234ms)
+  ✗ Found 2 circular dependency chain(s)
+  ⚠ src/services/auth.ts → src/models/user.ts → src/services/auth.ts
+  ⚠ src/utils/helpers.ts → src/config/index.ts → src/utils/helpers.ts
+
+────────────────────────────────────────────────
+Summary  2 passed  2 warned  1 failed  in 2106ms
+
+Audit failed. Fix the issues above before shipping.
+```
+
+## Why StackProbe?
+
+<CardGroup cols={2}>
+  <Card title="Fast" icon="gauge-high">
+    Runs all checks in parallel. Most audits complete in under 3 seconds.
+  </Card>
+  <Card title="Zero Config" icon="wand-magic-sparkles">
+    Works out of the box with sensible defaults. Configure only what you need.
+  </Card>
+  <Card title="CI-Ready" icon="check-double">
+    JSON output and exit codes make it perfect for CI/CD pipelines.
+  </Card>
+  <Card title="Lightweight" icon="feather">
+    Minimal dependencies. No heavy analysis tools required.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Steps>
+  <Step title="Install StackProbe">
+    Get up and running with npm, yarn, pnpm, or npx → [Installation](/installation)
+  </Step>
+  <Step title="Run Your First Audit">
+    Audit a project in minutes → [Quickstart](/quickstart)
+  </Step>
+  <Step title="Integrate with CI">
+    Add to your GitHub Actions workflow → [CI Integration](/usage/ci-integration)
+  </Step>
+</Steps>

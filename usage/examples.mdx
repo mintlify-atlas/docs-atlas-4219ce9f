@@ -1,0 +1,549 @@
+---
+title: Usage Examples
+description: Real-world examples of using StackProbe in different scenarios
+---
+
+## Basic Usage
+
+### Run All Checks
+
+```bash
+stackprobe audit
+```
+
+**Example output:**
+
+```
+🔍 stackprobe — auditing your project...
+
+✅ license        PASS  (5ms)
+  → LICENSE found (MIT)
+
+✅ env            PASS  (3ms)
+  → No .env files exposed in version control
+
+⚠  deps           WARN  (1247ms)
+  ⚠ commander is 2 major version(s) behind (you: ^12.0.0, latest: 14.0.3)
+  → chalk has a new major version available (you: ^4.1.2, latest: 5.6.2)
+  → Only checked 20 of 45 dependencies to avoid rate limiting
+
+✅ engine         PASS  (2ms)
+  → Node.js version constraint: >=16.0.0
+
+✅ circular       PASS  (876ms)
+  → No circular dependencies detected
+
+────────────────────────────────────────────────
+Summary  4 passed  1 warned  in 2133ms
+
+Audit passed with warnings. Consider reviewing them.
+```
+
+## Selective Checks
+
+### Check Only Dependencies
+
+```bash
+stackprobe audit --only deps
+```
+
+**Use case:** Quickly verify your dependencies are up-to-date without running other checks.
+
+**Example output:**
+
+```
+🔍 stackprobe — auditing your project...
+
+⚠  deps           WARN  (1523ms)
+  ⚠ commander is 2 major version(s) behind (you: ^12.0.0, latest: 14.0.3)
+  → typescript has a new major version available (you: ^4.9.5, latest: 5.9.3)
+  → All 20 checked dependencies are up to date
+
+────────────────────────────────────────────────
+Summary  0 passed  1 warned  in 1523ms
+
+Audit passed with warnings. Consider reviewing them.
+```
+
+### Check Multiple Specific Areas
+
+```bash
+stackprobe audit --only deps,engine,license
+```
+
+**Use case:** Run a focused audit on project configuration before publishing.
+
+### Skip Expensive Checks
+
+```bash
+stackprobe audit --only license,env,engine
+```
+
+**Use case:** Fast pre-commit validation without slow dependency or circular checks.
+
+## JSON Output
+
+### Generate JSON Report
+
+```bash
+stackprobe audit --json
+```
+
+**Example output:**
+
+```json
+{
+  "results": [
+    {
+      "checkName": "license",
+      "status": "pass",
+      "messages": [
+        {
+          "level": "info",
+          "text": "LICENSE found (MIT)"
+        }
+      ],
+      "duration": 5
+    },
+    {
+      "checkName": "env",
+      "status": "pass",
+      "messages": [
+        {
+          "level": "info",
+          "text": "No .env files exposed in version control"
+        }
+      ],
+      "duration": 3
+    },
+    {
+      "checkName": "deps",
+      "status": "warn",
+      "messages": [
+        {
+          "level": "warn",
+          "text": "commander is 2 major version(s) behind (you: ^12.0.0, latest: 14.0.3)"
+        },
+        {
+          "level": "info",
+          "text": "chalk has a new major version available (you: ^4.1.2, latest: 5.6.2)"
+        }
+      ],
+      "duration": 1247
+    },
+    {
+      "checkName": "engine",
+      "status": "pass",
+      "messages": [
+        {
+          "level": "info",
+          "text": "Node.js version constraint: >=16.0.0"
+        }
+      ],
+      "duration": 2
+    },
+    {
+      "checkName": "circular",
+      "status": "pass",
+      "messages": [
+        {
+          "level": "info",
+          "text": "No circular dependencies detected"
+        }
+      ],
+      "duration": 876
+    }
+  ],
+  "duration": 2133
+}
+```
+
+### Save JSON to File
+
+```bash
+stackprobe audit --json > audit-report.json
+```
+
+**Use case:** Archive audit results for trend analysis or compliance reporting.
+
+### Parse JSON with jq
+
+```bash
+# Get only failed checks
+stackprobe audit --json | jq '.results[] | select(.status=="fail")"
+
+# Count warnings
+stackprobe audit --json | jq '[.results[] | select(.status=="warn")] | length"
+
+# List all error messages
+stackprobe audit --json | jq '.results[].messages[] | select(.level=="error") | .text"
+
+# Get check with longest duration
+stackprobe audit --json | jq '.results | max_by(.duration)"
+
+# Summary of statuses
+stackprobe audit --json | jq '.results | group_by(.status) | map({status: .[0].status, count: length})"
+```
+
+## Pre-commit Hook Setup
+
+### Using Husky
+
+**Install Husky:**
+
+```bash
+npm install --save-dev husky
+npx husky init
+```
+
+**Add to `.husky/pre-commit`:**
+
+```bash
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run fast checks only
+npx stackprobe audit --only license,env,engine
+```
+
+### Using lint-staged
+
+```bash
+npm install --save-dev lint-staged husky
+```
+
+**In `package.json`:**
+
+```json
+{
+  "lint-staged": {
+    "package.json": [
+      "stackprobe audit --only deps,engine"
+    ],
+    "*.{js,ts}": [
+      "eslint --fix",
+      "stackprobe audit --only circular"
+    ]
+  }
+}
+```
+
+**Add to `.husky/pre-commit`:**
+
+```bash
+#!/usr/bin/env sh
+npx lint-staged
+```
+
+### Simple Git Hook (No Dependencies)
+
+**Create `.git/hooks/pre-commit`:**
+
+```bash
+#!/bin/bash
+
+echo "Running StackProbe..."
+npx stackprobe audit --only license,env,engine
+
+if [ $? -ne 0 ]; then
+  echo "StackProbe audit failed. Commit aborted."
+  exit 1
+fi
+```
+
+**Make it executable:**
+
+```bash
+chmod +x .git/hooks/pre-commit
+```
+
+## Package.json Scripts
+
+### Basic Integration
+
+```json
+{
+  "scripts": {
+    "audit": "stackprobe audit",
+    "audit:deps": "stackprobe audit --only deps",
+    "audit:json": "stackprobe audit --json",
+    "pretest": "stackprobe audit --only license,env,engine",
+    "prepublishOnly": "stackprobe audit"
+  }
+}
+```
+
+### Advanced Scripts
+
+```json
+{
+  "scripts": {
+    "audit": "stackprobe audit",
+    "audit:fast": "stackprobe audit --only license,env,engine",
+    "audit:deps": "stackprobe audit --only deps",
+    "audit:circular": "stackprobe audit --only circular",
+    "audit:json": "stackprobe audit --json | tee audit-report.json",
+    "audit:ci": "stackprobe audit --json",
+    "precommit": "npm run audit:fast",
+    "prepush": "npm run audit",
+    "prepublishOnly": "npm run audit && npm test"
+  }
+}
+```
+
+**Usage:**
+
+```bash
+npm run audit          # Full audit
+npm run audit:fast     # Fast checks
+npm run audit:deps     # Dependencies only
+npm run audit:json     # JSON output + save to file
+```
+
+## Real-World Scenarios
+
+### Scenario 1: Pre-publish Checklist
+
+```bash
+# Before publishing to npm
+npm run build
+npm run test
+stackprobe audit
+npm publish
+```
+
+**Automate it:**
+
+```json
+{
+  "scripts": {
+    "prepublishOnly": "npm run build && npm test && stackprobe audit"
+  }
+}
+```
+
+### Scenario 2: Dependency Update Workflow
+
+```bash
+# Check what's outdated
+stackprobe audit --only deps
+
+# Update specific package
+npm install commander@latest
+
+# Verify no new issues
+stackprobe audit
+```
+
+### Scenario 3: New Project Setup
+
+```bash
+# Initialize new project
+mkdir my-project && cd my-project
+npm init -y
+
+# Install StackProbe
+npm install --save-dev stackprobe
+
+# Run initial audit
+npx stackprobe audit
+
+# Fix issues
+touch LICENSE
+echo "node_modules/" > .gitignore
+
+# Verify
+npx stackprobe audit
+```
+
+### Scenario 4: Large Monorepo
+
+```bash
+# Run in each package
+for dir in packages/*; do
+  echo "Checking $dir..."
+  (cd "$dir" && stackprobe audit --only deps,engine)
+done
+```
+
+**Or use a script:**
+
+```json
+{
+  "scripts": {
+    "audit:all": "lerna exec -- stackprobe audit",
+    "audit:deps": "lerna exec -- stackprobe audit --only deps"
+  }
+}
+```
+
+### Scenario 5: Security Review
+
+```bash
+# Check for exposed secrets
+stackprobe audit --only env --json | jq '.results[].messages[] | select(.level=="error")"
+
+# Verify license compliance
+stackprobe audit --only license
+
+# Check dependency freshness
+stackprobe audit --only deps
+```
+
+### Scenario 6: Continuous Monitoring
+
+```bash
+# Daily dependency check (cron job)
+0 9 * * * cd /path/to/project && stackprobe audit --json > /var/log/stackprobe/$(date +\%Y-\%m-\%d).json
+```
+
+**Or using GitHub Actions:**
+
+```yaml
+name: Daily Audit
+on:
+  schedule:
+    - cron: '0 9 * * *"
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npm ci
+      - run: npx stackprobe audit
+```
+
+## Configuration Examples
+
+### Ignore Specific Checks
+
+**Create `stackprobe.config.js`:**
+
+```javascript
+module.exports = {
+  ignore: ['circular'],  // Skip circular dependency check
+};
+```
+
+```bash
+stackprobe audit  # Won't run circular check
+```
+
+### Run Only Specific Checks by Default
+
+```javascript
+module.exports = {
+  only: ['deps', 'engine', 'license'],
+};
+```
+
+```bash
+stackprobe audit  # Only runs deps, engine, license
+```
+
+**Override with CLI:**
+
+```bash
+stackprobe audit --only env  # Overrides config
+```
+
+### Environment-Specific Configuration
+
+```javascript
+module.exports = {
+  ignore: process.env.CI === 'true' ? ['circular'] : [],
+  failOn: process.env.CI === 'true' ? 'warn' : 'error',
+};
+```
+
+## Terminal Output Examples
+
+### All Checks Passing
+
+```
+🔍 stackprobe — auditing your project...
+
+✅ license        PASS  (5ms)
+  → LICENSE found (MIT)
+
+✅ env            PASS  (3ms)
+  → No .env files exposed in version control
+
+✅ deps           PASS  (1523ms)
+  → All 20 checked dependencies are up to date
+
+✅ engine         PASS  (2ms)
+  → Node.js version constraint: >=16.0.0
+
+✅ circular       PASS  (1012ms)
+  → No circular dependencies detected
+
+────────────────────────────────────────────────
+Summary  5 passed  in 2545ms
+
+All checks passed. Ship it! 🚀
+```
+
+### With Warnings
+
+```
+🔍 stackprobe — auditing your project...
+
+⚠  license        WARN  (5ms)
+  ⚠ No LICENSE file found — open source projects should have one
+  → Add a LICENSE file. Not sure which? → https://choosealicense.com
+
+✅ env            PASS  (3ms)
+  → No .env files exposed in version control
+
+⚠  deps           WARN  (1425ms)
+  ⚠ react is 2 major version(s) behind (you: ^16.14.0, latest: 18.2.0)
+  ⚠ typescript is 2 major version(s) behind (you: ^3.9.10, latest: 5.9.3)
+
+────────────────────────────────────────────────
+Summary  1 passed  2 warned  in 1433ms
+
+Audit passed with warnings. Consider reviewing them.
+```
+
+### With Failures
+
+```
+🔍 stackprobe — auditing your project...
+
+✅ license        PASS  (5ms)
+  → LICENSE found (MIT)
+
+✗  env            FAIL  (8ms)
+  ✗ Found .env file in git — this may expose secrets
+  → Add .env to .gitignore immediately
+
+✗  circular       FAIL  (1523ms)
+  ✗ Circular dependency detected: src/utils.ts → src/helpers.ts → src/utils.ts
+  ✗ Circular dependency detected: src/api/index.ts → src/api/client.ts → src/api/index.ts
+
+────────────────────────────────────────────────
+Summary  1 passed  2 failed  in 1536ms
+
+Audit failed. Fix the issues above before shipping.
+```
+
+(Exit code: 1)
+
+## Tips and Best Practices
+
+1. **Start with fast checks** - Use `--only license,env,engine` for quick feedback
+2. **Use JSON in scripts** - Parse results programmatically for custom workflows
+3. **Integrate with git hooks** - Catch issues before they're committed
+4. **Add to package.json** - Make audits part of your standard workflow
+5. **Run in CI** - Automate quality checks for every PR
+6. **Skip slow checks locally** - Run full audits in CI only
+7. **Save reports** - Track audit history for compliance or trends
+8. **Combine with other tools** - Use alongside ESLint, Prettier, tests
+
+## Next Steps
+
+- [CI/CD Integration](/usage/ci-integration) - Set up StackProbe in your pipeline
+- [Configuration](/configuration/config-file) - Customize check behavior
+- [Available Checks](/checks/overview) - Learn about all available checks

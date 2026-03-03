@@ -1,0 +1,296 @@
+---
+title: "License Check"
+description: "Ensure your project has a LICENSE file"
+icon: "scale-balanced"
+---
+
+## What It Does
+
+The license check verifies that your project includes a `LICENSE` file, which is essential for open-source projects to define usage rights and legal protections.
+
+**Key Features:**
+- Checks for common LICENSE file names
+- Detects license type (MIT, Apache, GPL, BSD, ISC)
+- Warns if no license is found
+- Passes with license details if found
+
+<Note>
+  **Source:** `/src/checks/license.ts`
+</Note>
+
+## What It Checks
+
+The check searches for these file names (case-sensitive):
+
+```typescript /src/checks/license.ts:5-12
+const LICENSE_NAMES = [
+  "LICENSE",
+  "LICENSE.md",
+  "LICENSE.txt",
+  "LICENCE",
+  "LICENCE.md",
+  "LICENCE.txt",
+];
+```
+
+If found, it reads the file content and attempts to detect the license type by matching against common patterns:
+
+- **MIT License** → `/MIT License/i`
+- **Apache 2.0** → `/Apache License/i`
+- **GPL** → `/GNU GENERAL PUBLIC LICENSE/i`
+- **ISC** → `/ISC License/i`
+- **BSD** → `/BSD/i`
+
+<Accordion title="View Source Code" icon="code">
+```typescript /src/checks/license.ts:14-58
+export async function checkLicense(): Promise<CheckResult> {
+  const cwd = process.cwd();
+
+  const found = LICENSE_NAMES.find((name) =>
+    fs.existsSync(path.join(cwd, name)),
+  );
+
+  if (found) {
+    // Try to read what kind of license it is
+    const content = fs.readFileSync(path.join(cwd, found), "utf-8");
+    let licenseType = "Unknown";
+
+    if (/MIT License/i.test(content)) licenseType = "MIT";
+    else if (/Apache License/i.test(content)) licenseType = "Apache 2.0";
+    else if (/GNU GENERAL PUBLIC LICENSE/i.test(content)) licenseType = "GPL";
+    else if (/ISC License/i.test(content)) licenseType = "ISC";
+    else if (/BSD/i.test(content)) licenseType = "BSD";
+
+    return {
+      checkName: "license",
+      status: "pass",
+      messages: [
+        {
+          level: "info",
+          text: `${found} found (${licenseType})`,
+        },
+      ],
+    };
+  }
+
+  return {
+    checkName: "license",
+    status: "warn",
+    messages: [
+      {
+        level: "warn",
+        text: "No LICENSE file found — open source projects should have one",
+      },
+      {
+        level: "info",
+        text: "Add a LICENSE file. Not sure which? → https://choosealicense.com",
+      },
+    ],
+  };
+}
+```
+</Accordion>
+
+## Example Output
+
+<CodeGroup>
+```bash Pass: License Found
+✓ license — LICENSE found (MIT)
+```
+
+```bash Pass: Different Format
+✓ license — LICENCE.md found (Apache 2.0)
+```
+
+```bash Warn: No License
+⚠ license
+  ⚠ No LICENSE file found — open source projects should have one
+  ℹ Add a LICENSE file. Not sure which? → https://choosealicense.com
+```
+
+```bash Pass: Unknown License Type
+✓ license — LICENSE.txt found (Unknown)
+```
+</CodeGroup>
+
+## Why It Matters
+
+<Warning>
+  **Legal & Community Risks**
+  
+  Projects without a license file:
+  - **Cannot be legally used** by others (default copyright applies)
+  - **Won't be accepted** by most companies or enterprises
+  - **Risk copyright disputes** and legal issues
+  - **Discourage contributions** — developers avoid unlicensed code
+  - **Fail open-source audits** in enterprise environments
+</Warning>
+
+<Note>
+  **Fun Fact:** GitHub shows "No license" on repos without a LICENSE file, which can hurt adoption.
+</Note>
+
+## How to Fix
+
+### 1. Choose a License
+
+Visit [choosealicense.com](https://choosealicense.com) to find the right license for your project:
+
+<CardGroup cols={3}>
+  <Card title="MIT" icon="hands-holding-circle">
+    **Permissive**
+    
+    Most popular. Allows commercial use with minimal restrictions.
+  </Card>
+  <Card title="Apache 2.0" icon="scale-balanced">
+    **Permissive + Patent**
+    
+    Like MIT but includes explicit patent grant.
+  </Card>
+  <Card title="GPL v3" icon="lock">
+    **Copyleft**
+    
+    Requires derivatives to be open-source too.
+  </Card>
+</CardGroup>
+
+### 2. Add the LICENSE File
+
+<CodeGroup>
+```bash Copy from Template
+curl -o LICENSE https://raw.githubusercontent.com/licenses/license-templates/master/templates/mit.txt
+```
+
+```bash Using GitHub CLI
+gh repo create --license mit
+```
+
+```bash Manual Creation
+touch LICENSE
+# Paste license text and update copyright year + name
+```
+</CodeGroup>
+
+### 3. Update Copyright Info
+
+Most licenses require you to fill in:
+- **Year:** Current year (e.g., 2024)
+- **Copyright holder:** Your name or organization
+
+```text LICENSE (MIT example)
+MIT License
+
+Copyright (c) 2024 Your Name
+
+Permission is hereby granted, free of charge, to any person obtaining a copy...
+```
+
+### 4. Verify
+
+```bash
+stackprobe audit --only license
+```
+
+Expected output:
+```
+✓ license — LICENSE found (MIT)
+```
+
+## Supported License Types
+
+The check automatically detects these common licenses:
+
+| License | Pattern Matched | Use Case |
+|---------|----------------|----------|
+| **MIT** | `MIT License` | Most permissive, widely used |
+| **Apache 2.0** | `Apache License` | Includes patent protection |
+| **GPL** | `GNU GENERAL PUBLIC LICENSE` | Strong copyleft |
+| **ISC** | `ISC License` | Similar to MIT, simpler wording |
+| **BSD** | `BSD` | Permissive with attribution |
+
+If your license doesn't match these patterns, it shows as **"Unknown"** but still passes.
+
+## Adding License to package.json
+
+While not checked by this tool, it's good practice to also specify the license in `package.json`:
+
+```json package.json
+{
+  "name": "your-project",
+  "version": "1.0.0",
+  "license": "MIT"
+}
+```
+
+This helps npm, GitHub, and other tools understand your licensing.
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="What if I don't want to open-source my code?" icon="lock">
+    Use a proprietary license or add:
+    
+    ```text LICENSE
+    Copyright (c) 2024 Your Company
+    All rights reserved.
+    
+    This software is proprietary and confidential.
+    Unauthorized copying or distribution is prohibited.
+    ```
+    
+    Or set in package.json:
+    ```json
+    { "license": "UNLICENSED" }
+    ```
+  </Accordion>
+  
+  <Accordion title="Can I change the license later?" icon="arrows-rotate">
+    Yes, but:
+    - Previous versions remain under the old license
+    - Contributors may need to agree to the change
+    - Use semantic versioning for major license changes (e.g., v2.0.0)
+  </Accordion>
+  
+  <Accordion title="What about dual licensing?" icon="copy">
+    You can offer multiple licenses:
+    
+    ```text LICENSE
+    This project is dual-licensed under MIT and Apache 2.0.
+    You may choose either license for your use.
+    ```
+  </Accordion>
+  
+  <Accordion title="Do I need a license for private repos?" icon="eye-slash">
+    Not strictly required, but recommended:
+    - Clarifies usage rights for team members
+    - Simplifies future open-sourcing
+    - Helps if the repo becomes public later
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+To disable this check:
+
+```json stackprobe.config.json
+{
+  "ignore": ["license"]
+}
+```
+
+Or run it exclusively:
+
+```bash
+stackprobe audit --only license
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Engine Check" icon="server" href="/checks/engine">
+    Verify Node.js version requirements
+  </Card>
+  <Card title="Environment Check" icon="key" href="/checks/environment">
+    Validate .env file synchronization
+  </Card>
+</CardGroup>

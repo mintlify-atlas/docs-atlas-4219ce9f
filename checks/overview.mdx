@@ -1,0 +1,190 @@
+---
+title: "Check System Overview"
+description: "Understanding StackProbe's automated check system"
+---
+
+## What are Checks?
+
+Checks are automated validators that scan your project for common issues, misconfigurations, and best practice violations. Each check runs independently and reports its findings with actionable recommendations.
+
+## Available Checks
+
+<CardGroup cols={2}>
+  <Card title="Dependencies" icon="cube" href="/checks/dependencies">
+    Scans for outdated npm packages and major version drift
+  </Card>
+  <Card title="Environment" icon="key" href="/checks/environment">
+    Validates .env and .env.example synchronization
+  </Card>
+  <Card title="License" icon="scale-balanced" href="/checks/license">
+    Ensures your project has a LICENSE file
+  </Card>
+  <Card title="Engine" icon="server" href="/checks/engine">
+    Verifies Node.js version requirements
+  </Card>
+  <Card title="Circular" icon="arrows-spin" href="/checks/circular">
+    Detects circular dependency chains
+  </Card>
+</CardGroup>
+
+## Check Statuses
+
+Every check returns one of four statuses:
+
+<AccordionGroup>
+  <Accordion title="pass" icon="check">
+    Everything looks good. No action required.
+    
+    **Example:**
+    ```
+    ✓ license — LICENSE found (MIT)
+    ```
+  </Accordion>
+  
+  <Accordion title="warn" icon="triangle-exclamation">
+    Potential issues detected, but not critical. Consider addressing.
+    
+    **Example:**
+    ```
+    ⚠ deps — react is 2 major version(s) behind (you: ^16.0.0, latest: 18.3.1)
+    ```
+  </Accordion>
+  
+  <Accordion title="fail" icon="xmark">
+    Critical issues found. Must be fixed.
+    
+    **Example:**
+    ```
+    ✗ circular — Found 3 circular dependency chain(s)
+    ```
+    
+    <Warning>
+      **CI Impact:** When any check fails, `stackprobe audit` exits with code 1, failing your CI pipeline.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="skip" icon="forward">
+    Check couldn't run (e.g., no package.json found). Not an error.
+    
+    **Example:**
+    ```
+    ○ engine — No package.json found
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## How Checks Run
+
+Checks execute sequentially during `stackprobe audit`. Each check:
+
+1. **Analyzes** relevant files in your project
+2. **Validates** against best practices and requirements
+3. **Reports** findings with severity levels (info/warn/error)
+4. **Suggests** fixes when possible
+
+```bash
+stackprobe audit
+```
+
+<Note>
+  Check execution is fast — typically under 2 seconds for all checks combined.
+</Note>
+
+## Check Architecture
+
+The check system is defined in `/src/runner.ts:28-34`:
+
+```typescript
+const ALL_CHECKS: Record<string, () => Promise<CheckResult>> = {
+  license: checkLicense,
+  env: checkEnv,
+  deps: checkDependencies,
+  engine: checkEngine,
+  circular: checkCircular,
+};
+```
+
+Each check function returns a `CheckResult` object:
+
+```typescript
+interface CheckResult {
+  checkName: string;
+  status: "pass" | "warn" | "fail" | "skip";
+  messages: CheckMessage[];
+  duration?: number; // execution time in ms
+}
+
+interface CheckMessage {
+  level: "info" | "warn" | "error";
+  text: string;
+}
+```
+
+## Running Specific Checks
+
+You can run individual checks or filter them:
+
+<CodeGroup>
+```bash Run Only Deps Check
+stackprobe audit --only deps
+```
+
+```bash Run Multiple Checks
+stackprobe audit --only deps,env,license
+```
+
+```bash Ignore Specific Checks
+# In stackprobe.config.json
+{
+  "ignore": ["circular"]
+}
+```
+</CodeGroup>
+
+## JSON Output
+
+For CI integration, use JSON mode:
+
+```bash
+stackprobe audit --json
+```
+
+```json Output Example
+{
+  "results": [
+    {
+      "checkName": "deps",
+      "status": "warn",
+      "messages": [
+        {
+          "level": "warn",
+          "text": "react is 2 major version(s) behind (you: ^16.0.0, latest: 18.3.1)"
+        }
+      ],
+      "duration": 342
+    }
+  ],
+  "duration": 1823
+}
+```
+
+## Error Handling
+
+If a check crashes unexpectedly, it won't break the entire audit:
+
+- The check reports as **fail** with an error message
+- Other checks continue to run
+- Full stack trace is logged for debugging
+
+See `/src/runner.ts:58-71` for implementation details.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Checks" icon="sliders" href="/configuration/config-file">
+    Customize which checks run in your project
+  </Card>
+  <Card title="CI Integration" icon="rocket" href="/usage/ci-integration">
+    Add StackProbe to your CI/CD pipeline
+  </Card>
+</CardGroup>
